@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+/* 1. Tell Tailwind v4 to use the class-based dark mode */
+@custom-variant dark (&:is(.dark *));
+
+/* 2. Your custom utilities */
+@layer utilities {
+  .bg-wtw {
+    background: linear-gradient(135deg, #622F88 0%, #4C1D95 100%);
+  }
+
+  .text-wtw {
+    color: #622F88;
+  }
+}
+
+/* 3. Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}

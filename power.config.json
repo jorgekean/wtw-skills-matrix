@@ -1,0 +1,32 @@
+{
+  "version": "1.0",
+  "appId": "1644f82b-da84-4769-ac26-b62fd56ffeaa",
+  "appDisplayName": "WTW Skills Matrix",
+  "region": "prod",
+  "environmentId": "58cbf144-5cf9-e0c8-a815-a3c6d6575c02",
+  "description": "",
+  "buildPath": "./dist",
+  "buildEntryPoint": "index.html",
+  "localAppUrl": "http://localhost:3000",
+  "logoPath": "Default",
+  "connectionReferences": {},
+  "databaseReferences": {
+    "default.cds": {
+      "dataSources": {
+        "skilllibraries": {
+          "entitySetName": "wtw_skilllibraries",
+          "logicalName": "wtw_skilllibrary"
+        },
+        "colleagueprofiles": {
+          "entitySetName": "wtw_colleagueprofiles",
+          "logicalName": "wtw_colleagueprofile"
+        },
+        "skillassessments": {
+          "entitySetName": "wtw_skillassessments",
+          "logicalName": "wtw_skillassessment"
+        }
+      },
+      "environmentVariableName": ""
+    }
+  }
+}
