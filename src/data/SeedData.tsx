@@ -60,9 +60,6 @@ const SKILL_DATA = [
         "names": [
             "Triggers",
             "Communication",
-            "Communication",
-            "Communication",
-            "Communication"
         ]
     },
     {
