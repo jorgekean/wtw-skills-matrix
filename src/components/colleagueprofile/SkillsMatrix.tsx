@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { useParams } from 'react-router-dom'; // NEW: Import useParams
+import { useParams, useNavigate } from 'react-router-dom'; // NEW: Added useNavigate
 import { type ProficiencyLevel } from '../../types/skills';
 import { SkillCard } from './SkillCard';
 
@@ -8,10 +8,6 @@ import { Wtw_skilllibrariesService } from '../../generated/services/Wtw_skilllib
 import { Wtw_colleagueprofilesService } from '../../generated/services/Wtw_colleagueprofilesService';
 import { Wtw_skillassessmentsService } from '../../generated/services/Wtw_skillassessmentsService';
 import { useTheme } from '../../hooks/useTheme';
-
-// // Weights for Scoring (N/A = 1, O = 5)
-// const LEVEL_WEIGHTS: Record<ProficiencyLevel, number> = { 'N/A': 1, 'I': 2, 'L': 3, 'U': 4, 'O': 5 };
-// const LEVEL_LABELS = ['Any', 'N/A', 'I', 'L', 'U', 'O'];
 
 // Translators for Dataverse Choice Columns
 const INT_TO_LEVEL: Record<number, ProficiencyLevel> = {
@@ -34,7 +30,8 @@ const LEVEL_TO_INT: Record<ProficiencyLevel, number> = {
 const DEFAULT_SKILL_STATE = { rating: null, interested: false, updatedOn: null };
 
 export const SkillsMatrix: React.FC = () => {
-    // NEW: Grab the slug from the URL (e.g., "alice-thompson")
+    // NEW: Navigation hook added
+    const navigate = useNavigate();
     const { slug } = useParams<{ slug: string }>();
 
     const [activeCategory, setActiveCategory] = useState<string>('');
@@ -61,7 +58,6 @@ export const SkillsMatrix: React.FC = () => {
             try {
                 setIsLoading(true);
 
-                // Fetch all required tables at the same time
                 const [skillsRes, profilesRes, assessmentsRes] = await Promise.all([
                     Wtw_skilllibrariesService.getAll(),
                     Wtw_colleagueprofilesService.getAll(),
@@ -83,7 +79,7 @@ export const SkillsMatrix: React.FC = () => {
                         const skillId = item.wtw_skilllibraryid;
 
                         if (skillName && skillId) {
-                            skillMap.current[skillName] = skillId; // Save GUID for later
+                            skillMap.current[skillName] = skillId;
 
                             if (!groupedData[categoryName]) groupedData[categoryName] = [];
                             groupedData[categoryName].push(skillName);
@@ -108,7 +104,6 @@ export const SkillsMatrix: React.FC = () => {
                 if (Array.isArray(profiles)) {
                     const activeUser = profiles.find((p: any) => {
                         const name = p.wtw_colleaguename || p.wtw_name || '';
-                        // Convert their Dataverse name into a slug to see if it matches the URL
                         const generatedSlug = name.toLowerCase().replace(/\s+/g, '-');
                         return generatedSlug === slug;
                     });
@@ -126,12 +121,10 @@ export const SkillsMatrix: React.FC = () => {
 
                         userAssessments.forEach((a: any) => {
                             const skillId = a._wtw_skill_value || a._wtw_skilllibrary_value;
-
-                            // Find the skill name by looking up the GUID in our map
                             const skillName = Object.keys(skillMap.current).find(key => skillMap.current[key] === skillId);
 
                             if (skillName) {
-                                assessmentMap.current[skillName] = a.wtw_skillassessmentid; // Save Assessment GUID so we can UPDATE it later
+                                assessmentMap.current[skillName] = a.wtw_skillassessmentid;
 
                                 loadedSkillsState[skillName] = {
                                     rating: INT_TO_LEVEL[a.wtw_proficiency] || 'N/A',
@@ -141,7 +134,6 @@ export const SkillsMatrix: React.FC = () => {
                             }
                         });
 
-                        // Set the UI States
                         setHistoryNotes(activeUser.wtw_historyandnotes || '');
                         setUserSkills(loadedSkillsState);
                     } else {
@@ -159,9 +151,8 @@ export const SkillsMatrix: React.FC = () => {
         if (slug) {
             loadDataverseData();
         }
-    }, [slug]); // Depend on slug so it reloads if the URL changes
+    }, [slug]);
 
-    // OPTIMIZATION: Only recalculate when userSkills actually changes
     const { percentage, pendingCount } = useMemo(() => {
         if (Object.keys(skillsData).length === 0) return { percentage: 0, pendingCount: 0 };
 
@@ -173,7 +164,6 @@ export const SkillsMatrix: React.FC = () => {
         };
     }, [userSkills, skillsData]);
 
-    // OPTIMIZATION: Memoized functions prevent child cards from re-rendering unecessarily
     const handleUpdateRating = useCallback((skill: string, rating: ProficiencyLevel) => {
         setUserSkills(prev => ({
             ...prev,
@@ -192,7 +182,6 @@ export const SkillsMatrix: React.FC = () => {
         setHistoryNotes(e.target.value);
     }, []);
 
-    // --- SAVE TO DATAVERSE ---
     const handleSave = async () => {
         setIsSaving(true);
 
@@ -204,43 +193,32 @@ export const SkillsMatrix: React.FC = () => {
                 return;
             }
 
-            // 1. Update the Colleague Profile
             await Wtw_colleagueprofilesService.update(profileId, {
                 wtw_historyandnotes: historyNotes
             } as any);
 
-            // 2. Loop through the UI state and push Assessment updates
             for (const [skillName, details] of Object.entries(userSkills)) {
-
                 const existingAssessmentId = assessmentMap.current[skillName];
                 const skillId = skillMap.current[skillName];
 
                 if (!skillId) continue;
 
-                // Fix: Cast rating to ProficiencyLevel for TypeScript
                 const proficiencyInt = details.rating ? LEVEL_TO_INT[details.rating as ProficiencyLevel] : 894790000;
 
                 if (existingAssessmentId) {
-                    // UPDATE EXISTING RECORD
                     await Wtw_skillassessmentsService.update(existingAssessmentId, {
                         wtw_proficiency: proficiencyInt,
                         wtw_isfavorite: details.interested || false
                     } as any);
                 } else if (details.rating || details.interested) {
-                    // CREATE NEW RECORD
                     const newAssessment = await Wtw_skillassessmentsService.create({
-                        // Requires primary text name
                         wtw_skillassessment1: `${currentUserProfile.wtw_colleaguename || currentUserProfile.wtw_name} - ${skillName}`,
-
                         wtw_proficiency: proficiencyInt,
                         wtw_isfavorite: details.interested || false,
-
-                        // Lookups
                         "wtw_Colleague@odata.bind": `/wtw_colleagueprofiles(${profileId})`,
                         "wtw_Skill@odata.bind": `/wtw_skilllibraries(${skillId})`
                     } as any);
 
-                    // Save the new ID so if they click Save again, it updates instead of duplicating
                     const newId = newAssessment?.data?.wtw_skillassessmentid || (newAssessment as any)?.wtw_skillassessmentid;
                     if (newId) {
                         assessmentMap.current[skillName] = newId;
@@ -268,13 +246,18 @@ export const SkillsMatrix: React.FC = () => {
         );
     }
 
-    // Optional: Graceful fallback if URL is wrong
     if (!isLoading && !currentUserProfile) {
         return (
             <div className="flex h-screen w-full items-center justify-center bg-slate-50 dark:bg-slate-900">
                 <div className="text-center">
                     <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2">Profile Not Found</h2>
                     <p className="text-slate-500">We couldn't find a colleague matching "{slug}".</p>
+                    <button
+                        onClick={() => navigate('/')}
+                        className="mt-6 px-6 py-2 bg-[#622F88] text-white rounded-lg font-bold shadow-md hover:bg-[#4C1D95] transition-colors"
+                    >
+                        Return to List
+                    </button>
                 </div>
             </div>
         );
@@ -283,11 +266,24 @@ export const SkillsMatrix: React.FC = () => {
     return (
         <div className="flex flex-col h-screen overflow-hidden bg-slate-50 dark:bg-slate-900 transition-colors duration-200 font-sans">
             <header className="bg-gradient-to-r from-[#622F88] to-[#4C1D95] text-white flex-shrink-0 z-50 shadow-lg relative overflow-hidden">
-                {/* CSS OPTIMIZATION: Added transform-gpu to offload the heavy blur effect to the graphics card */}
                 <div className="absolute top-0 right-0 -mt-10 -mr-10 w-40 h-40 bg-white opacity-5 rounded-full blur-2xl transform-gpu"></div>
                 <div className="max-w-[1920px] mx-auto px-6 py-5 flex justify-between items-center relative z-10">
-                    <div className="flex items-center gap-5">
-                        <div className="w-1.5 h-12 bg-white/40 rounded-full shadow-[0_0_15px_rgba(255,255,255,0.3)]"></div>
+
+                    <div className="flex items-center gap-4 sm:gap-5">
+
+                        {/* NEW: Modern "Go to List" Back Button */}
+                        <button
+                            onClick={() => navigate('/')} // <-- Adjust to match your exact directory route if it's not '/'
+                            className="group flex items-center justify-center w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 transition-all shadow-sm backdrop-blur-sm transform-gpu active:scale-95"
+                            title="Return to Colleague List"
+                        >
+                            <svg className="w-5 h-5 text-white transition-transform group-hover:-translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                            </svg>
+                        </button>
+
+                        <div className="w-1.5 h-12 bg-white/40 rounded-full shadow-[0_0_15px_rgba(255,255,255,0.3)] hidden sm:block"></div>
+
                         <div>
                             <h1 className="text-xl font-extrabold tracking-tight">Skills Intelligence</h1>
                             <div className="flex items-center gap-3 mt-1.5">
@@ -365,7 +361,6 @@ export const SkillsMatrix: React.FC = () => {
                         <SkillCard
                             key={skill}
                             skill={skill}
-                            // OPTIMIZATION: Always passing a stable reference object if data doesn't exist
                             details={userSkills[skill] || DEFAULT_SKILL_STATE}
                             onUpdateRating={handleUpdateRating}
                             onToggleHeart={handleToggleHeart}

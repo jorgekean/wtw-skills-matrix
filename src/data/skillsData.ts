@@ -1,5 +1,7 @@
 import { type Category, type ProficiencyLevel } from '../types/skills';
 
+// NOT USED ANYMORE
+
 export const SKILLS_DATA: Record<Category, string[]> = {
     BC: ["Calc", "Hours Calc", "Events", "PCOMMS", "Carriers", "Reports", "Import", "Conversion", "Validations"],
     Internal: ["FUSE", "Test Tracker", "MARS", "Saturn", "Gov Portal", "SLA", "Aura Tool", "Project Eureka"],
