@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { type ProficiencyLevel } from '../../types/skills'; // Ensure you update this type in your types file!
+import { type ProficiencyLevel } from '../../types/skills';
 import { SkillCard } from './SkillCard';
 
 // --- Import the Generated Dataverse Services ---
@@ -9,15 +9,13 @@ import { Wtw_colleagueprofilesService } from '../../generated/services/Wtw_colle
 import { Wtw_skillassessmentsService } from '../../generated/services/Wtw_skillassessmentsService';
 import { useTheme } from '../../hooks/useTheme';
 
-// UPDATED: Translators for Dataverse Choice Columns
-// IMPORTANT: You MUST verify these integer values match your new Dataverse Choice column values!
 const INT_TO_LEVEL: Record<number, ProficiencyLevel> = {
     894790000: 'N/A',
     894790001: 'Potential',
     894790002: 'Exposure',
     894790003: 'Experience',
     894790004: 'Expert',
-    894790005: 'Consulting' // Added the 6th option
+    894790005: 'Consulting'
 };
 
 const LEVEL_TO_INT: Record<ProficiencyLevel, number> = {
@@ -26,10 +24,9 @@ const LEVEL_TO_INT: Record<ProficiencyLevel, number> = {
     'Exposure': 894790002,
     'Experience': 894790003,
     'Expert': 894790004,
-    'Consulting': 894790005 // Added the 6th option
+    'Consulting': 894790005
 };
 
-// OPTIMIZATION: Stable memory reference prevents unrated cards from constantly re-rendering
 const DEFAULT_SKILL_STATE = { rating: null, interested: false, updatedOn: null };
 
 export const SkillsMatrix: React.FC = () => {
@@ -41,20 +38,17 @@ export const SkillsMatrix: React.FC = () => {
     const [isSaving, setIsSaving] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
 
-    // Dynamic Data States
-    const [skillsData, setSkillsData] = useState<Record<string, string[]>>({});
+    // UPDATED: Dynamic Data State now maps Category -> Subcategory -> Array of Skills
+    const [skillsData, setSkillsData] = useState<Record<string, Record<string, string[]>>>({});
     const [categories, setCategories] = useState<string[]>([]);
 
-    // Dataverse Trackers (Hidden from UI but required for saving)
     const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
-    const skillMap = useRef<Record<string, string>>({}); // Maps Skill Name -> Skill GUID
-    const assessmentMap = useRef<Record<string, string>>({}); // Maps Skill Name -> Existing Assessment GUID
+    const skillMap = useRef<Record<string, string>>({});
+    const assessmentMap = useRef<Record<string, string>>({});
 
-    // OPTIMIZATION: Split state so typing in history doesn't re-render skill cards
     const [historyNotes, setHistoryNotes] = useState<string>('');
     const [userSkills, setUserSkills] = useState<Record<string, any>>({});
 
-    // --- FETCH ALL DATAVERSE DATA ---
     useEffect(() => {
         async function loadDataverseData() {
             try {
@@ -70,27 +64,37 @@ export const SkillsMatrix: React.FC = () => {
                 const profiles = profilesRes.data || profilesRes;
                 const assessments = assessmentsRes.data || assessmentsRes;
 
-                // 1. Structure the Skill Library & Build the GUID Map
-                const groupedData: Record<string, string[]> = {};
+                // 1. Structure the Skill Library & Build the GUID Map (UPDATED FOR SUBCATEGORIES)
+                const groupedData: Record<string, Record<string, string[]>> = {};
                 const uniqueCategories = new Set<string>();
 
                 if (Array.isArray(skills)) {
                     skills.forEach((item: any) => {
                         const categoryName = item['wtw_category@OData.Community.Display.V1.FormattedValue'] || 'Uncategorized';
+                        const subCategoryName = item.wtw_subcategory || 'General'; // Grabs subcategory or defaults
                         const skillName = item.wtw_skillname || item.wtw_name || 'Unknown Skill';
                         const skillId = item.wtw_skilllibraryid;
 
                         if (skillName && skillId) {
                             skillMap.current[skillName] = skillId;
 
-                            if (!groupedData[categoryName]) groupedData[categoryName] = [];
-                            groupedData[categoryName].push(skillName);
+                            // Initialize nested dictionary levels if they don't exist
+                            if (!groupedData[categoryName]) groupedData[categoryName] = {};
+                            if (!groupedData[categoryName][subCategoryName]) groupedData[categoryName][subCategoryName] = [];
+
+                            groupedData[categoryName][subCategoryName].push(skillName);
                             uniqueCategories.add(categoryName);
                         }
                     });
+
+                    // Sort skills alphabetically inside their subcategories
+                    Object.keys(groupedData).forEach(cat => {
+                        Object.keys(groupedData[cat]).forEach(subCat => {
+                            groupedData[cat][subCat].sort();
+                        });
+                    });
                 }
 
-                // Sort Categories
                 const desiredOrder = ["BC Components", "Internal Initiatives", "Tech Skills", "Soft Skills"];
                 const categoriesArray = Array.from(uniqueCategories).sort((a, b) => {
                     const indexA = desiredOrder.indexOf(a);
@@ -102,7 +106,6 @@ export const SkillsMatrix: React.FC = () => {
                 setCategories(categoriesArray);
                 if (categoriesArray.length > 0) setActiveCategory(categoriesArray[0]);
 
-                // 2. Find Current User Profile Dynamically using the URL Slug
                 if (Array.isArray(profiles)) {
                     const activeUser = profiles.find((p: any) => {
                         const name = p.wtw_colleaguename || p.wtw_name || '';
@@ -114,7 +117,6 @@ export const SkillsMatrix: React.FC = () => {
                         setCurrentUserProfile(activeUser);
                         const profileId = activeUser.wtw_colleagueprofileid;
 
-                        // 3. Find User's Existing Assessments
                         const userAssessments = Array.isArray(assessments)
                             ? assessments.filter((a: any) => a._wtw_colleague_value === profileId || a._wtw_colleagueprofile_value === profileId)
                             : [];
@@ -129,7 +131,7 @@ export const SkillsMatrix: React.FC = () => {
                                 assessmentMap.current[skillName] = a.wtw_skillassessmentid;
 
                                 loadedSkillsState[skillName] = {
-                                    rating: INT_TO_LEVEL[a.wtw_proficiency] || 'N/A', // Defaults safely to N/A
+                                    rating: INT_TO_LEVEL[a.wtw_proficiency] || 'N/A',
                                     interested: a.wtw_isfavorite || false,
                                     updatedOn: a.modifiedon || new Date().toISOString()
                                 };
@@ -155,11 +157,13 @@ export const SkillsMatrix: React.FC = () => {
         }
     }, [slug]);
 
+    // UPDATED: Flattens the nested dictionary to correctly calculate completion percentages
     const { percentage, pendingCount } = useMemo(() => {
         if (Object.keys(skillsData).length === 0) return { percentage: 0, pendingCount: 0 };
 
-        const allSkills = Object.values(skillsData).flat();
+        const allSkills = Object.values(skillsData).flatMap(subCats => Object.values(subCats).flat());
         const accessedCount = allSkills.filter(skill => userSkills[skill]?.rating).length;
+
         return {
             percentage: Math.round((accessedCount / allSkills.length) * 100) || 0,
             pendingCount: allSkills.length - accessedCount
@@ -178,6 +182,23 @@ export const SkillsMatrix: React.FC = () => {
             ...prev,
             [skill]: { ...prev[skill], interested: !prev[skill]?.interested, updatedOn: new Date().toISOString() }
         }));
+    }, []);
+
+    const handleBulkUpdate = useCallback((skillsList: string[], rating: ProficiencyLevel) => {
+        setUserSkills(prev => {
+            const updated = { ...prev };
+            const now = new Date().toISOString();
+
+            skillsList.forEach(skill => {
+                updated[skill] = {
+                    ...updated[skill],
+                    rating,
+                    updatedOn: now
+                };
+            });
+
+            return updated;
+        });
     }, []);
 
     const handleHistoryChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -205,7 +226,6 @@ export const SkillsMatrix: React.FC = () => {
 
                 if (!skillId) continue;
 
-                // Lookup int value or default to N/A int value
                 const proficiencyInt = details.rating ? LEVEL_TO_INT[details.rating as ProficiencyLevel] : 894790000;
 
                 if (existingAssessmentId) {
@@ -265,6 +285,9 @@ export const SkillsMatrix: React.FC = () => {
             </div>
         );
     }
+
+    // Retrieve subcategories for the active tab (fallback to empty object)
+    const activeSubcategories = skillsData[activeCategory] || {};
 
     return (
         <div className="flex flex-col h-screen overflow-hidden bg-slate-50 dark:bg-slate-900 transition-colors duration-200 font-sans">
@@ -339,7 +362,6 @@ export const SkillsMatrix: React.FC = () => {
                     <div className="bg-slate-50/80 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-700 px-6 py-3 flex flex-wrap gap-4 justify-between items-center">
                         <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Proficiency Guide</span>
                         <div className="flex flex-wrap gap-4 lg:gap-6">
-                            {/* UPDATED: Legend accurately reflects the 6 new choices and applies updated styling */}
                             {[
                                 { label: 'N/A', color: 'bg-slate-400' },
                                 { label: 'Potential', color: 'bg-sky-400' },
@@ -359,16 +381,60 @@ export const SkillsMatrix: React.FC = () => {
             </section>
 
             <main className="flex-1 overflow-y-auto p-6 lg:p-8 pb-24">
-                <div className="max-w-[1920px] mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
-                    {(skillsData[activeCategory] || []).map(skill => (
-                        <SkillCard
-                            key={skill}
-                            skill={skill}
-                            details={userSkills[skill] || DEFAULT_SKILL_STATE}
-                            onUpdateRating={handleUpdateRating}
-                            onToggleHeart={handleToggleHeart}
-                        />
-                    ))}
+                {/* UPDATED: Iterate over Subcategories, rendering headers and grids cleanly */}
+                <div className="max-w-[1920px] mx-auto flex flex-col gap-10">
+                    {Object.entries(activeSubcategories)
+                        .sort(([catA], [catB]) => catA === 'General' ? -1 : catB === 'General' ? 1 : catA.localeCompare(catB))
+                        .map(([subCat, skills]) => (
+                            <div key={subCat} className="flex flex-col gap-5">
+
+                                {/* UPDATED: Subcategory Header with Bulk Action */}
+                                <div className="flex items-center gap-4 group">
+                                    <h2 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest">{subCat}</h2>
+                                    <div className="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
+
+                                    {/* Bulk Action Dropdown (Reveals on hover for a cleaner UI) */}
+                                    <div className="relative opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-200">
+                                        <select
+                                            className="text-[10px] font-bold text-[#622F88] dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-md py-1.5 pl-3 pr-7 appearance-none focus:outline-none focus:ring-2 focus:ring-purple-300 cursor-pointer shadow-sm"
+                                            defaultValue=""
+                                            onChange={(e) => {
+                                                if (e.target.value) {
+                                                    handleBulkUpdate(skills, e.target.value as ProficiencyLevel);
+                                                    e.target.value = ""; // Instantly reset the dropdown back to placeholder
+                                                }
+                                            }}
+                                        >
+                                            <option value="" disabled>Bulk Set All...</option>
+                                            <option value="N/A">Set All to N/A</option>
+                                            <option value="Potential">Set All to Potential</option>
+                                            <option value="Exposure">Set All to Exposure</option>
+                                            <option value="Experience">Set All to Experience</option>
+                                            <option value="Expert">Set All to Expert</option>
+                                            <option value="Consulting">Set All to Consulting</option>
+                                        </select>
+                                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[#622F88] dark:text-purple-400">
+                                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Skills Grid for this Subcategory */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
+                                    {skills.map(skill => (
+                                        <SkillCard
+                                            key={skill}
+                                            skill={skill}
+                                            details={userSkills[skill] || DEFAULT_SKILL_STATE}
+                                            onUpdateRating={handleUpdateRating}
+                                            onToggleHeart={handleToggleHeart}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
                 </div>
 
                 <div className="max-w-[1920px] mx-auto mt-12 bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm transition-colors duration-200">
