@@ -18,10 +18,11 @@ export const SkillCard: React.FC<SkillCardProps> = ({ skill, details, onUpdateRa
         const baseActive = 'shadow-sm ring-1 ring-black/5 dark:ring-white/10 text-white border-transparent';
         switch (level) {
             case 'N/A': return `${baseActive} bg-slate-400`;
-            case 'I': return `${baseActive} bg-indigo-400`;
-            case 'L': return `${baseActive} bg-emerald-500`;
-            case 'U': return `${baseActive} bg-[#622F88]`;
-            case 'O': return `${baseActive} bg-slate-900 dark:bg-slate-50 dark:text-slate-900`;
+            case 'Potential': return `${baseActive} bg-indigo-400`;
+            case 'Exposure': return `${baseActive} bg-emerald-500`;
+            case 'Experience': return `${baseActive} bg-[#622F88]`;
+            case 'Expert': return `${baseActive} bg-indigo-900`;
+            case 'Consulting': return `${baseActive} bg-slate-900 dark:bg-slate-50 dark:text-slate-900`;
             default: return '';
         }
     };

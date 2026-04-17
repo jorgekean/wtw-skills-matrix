@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 // --- Import the Generated Dataverse Services ---
 import { Wtw_skilllibrariesService } from '../../generated/services/Wtw_skilllibrariesService';
 import { Wtw_colleagueprofilesService } from '../../generated/services/Wtw_colleagueprofilesService';
 import { Wtw_skillassessmentsService } from '../../generated/services/Wtw_skillassessmentsService';
-import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../../hooks/useTheme';
+import { INT_TO_LEVEL, type ProficiencyLevel } from '../../types/skills';
 
 // --- Types ---
-type ProficiencyLevel = 'N/A' | 'I' | 'L' | 'U' | 'O';
+
 type MatrixView = 'BC' | 'INTERNAL';
 
 interface Colleague {
@@ -19,21 +20,22 @@ interface Colleague {
     tech: string[];
 }
 
-// Weights for Scoring (N/A = 1, O = 5)
-const LEVEL_WEIGHTS: Record<ProficiencyLevel, number> = { 'N/A': 1, 'I': 2, 'L': 3, 'U': 4, 'O': 5 };
-const LEVEL_LABELS = ['Any', 'N/A', 'I', 'L', 'U', 'O'];
-
-// Translates the Dataverse Choice Integers back into our UI Letters
-const INT_TO_LEVEL: Record<number, ProficiencyLevel> = {
-    894790000: 'N/A',
-    894790001: 'I',
-    894790002: 'L',
-    894790003: 'U',
-    894790004: 'O'
-};
+// UPDATED: Weights for Scoring (N/A = 1, Consulting = 6)
+const LEVEL_WEIGHTS: Record<ProficiencyLevel, number> = { 'N/A': 1, 'Potential': 2, 'Exposure': 3, 'Experience': 4, 'Expert': 5, 'Consulting': 6 };
+const LEVEL_LABELS = ['Any', 'N/A', 'Potential', 'Exposure', 'Experience', 'Expert', 'Consulting'];
 
 // --- Sub-Components ---
-const MultiSelectDropdown = ({ options, selected, toggleOption }: { options: string[], selected: string[], toggleOption: (opt: string) => void }) => {
+const GroupedMultiSelectDropdown = ({
+    groupedOptions,
+    selected,
+    toggleOption,
+    toggleCategory
+}: {
+    groupedOptions: Record<string, string[]>,
+    selected: string[],
+    toggleOption: (opt: string) => void,
+    toggleCategory: (skills: string[]) => void
+}) => {
     const [isOpen, setIsOpen] = useState(false);
 
     const displayValue = selected.length === 0
@@ -43,10 +45,11 @@ const MultiSelectDropdown = ({ options, selected, toggleOption }: { options: str
             : `${selected.length} Selected`;
 
     return (
-        <div className="relative w-full xl:w-56">
+        <div className="relative w-full xl:w-64">
             <button
+                type="button"
                 onClick={() => setIsOpen(!isOpen)}
-                className="w-full bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-[11px] font-bold text-slate-700 dark:text-slate-200 flex justify-between items-center shadow-sm"
+                className="w-full bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-[11px] font-bold text-slate-700 dark:text-slate-200 flex justify-between items-center shadow-sm hover:border-[#622F88] transition-colors"
             >
                 <span className="truncate">{displayValue}</span>
                 <svg className={`h-4 w-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
@@ -55,18 +58,43 @@ const MultiSelectDropdown = ({ options, selected, toggleOption }: { options: str
             {isOpen && (
                 <>
                     <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)}></div>
-                    <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-20 max-h-60 overflow-y-auto py-2">
-                        {options.map(opt => (
-                            <label key={opt} className="flex items-center px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={selected.includes(opt)}
-                                    onChange={() => toggleOption(opt)}
-                                    className="rounded border-slate-300 text-[#622F88] focus:ring-[#622F88] w-4 h-4 mr-3"
-                                />
-                                <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">{opt}</span>
-                            </label>
-                        ))}
+                    <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-20 max-h-80 overflow-y-auto overflow-x-hidden flex flex-col">
+
+                        {Object.entries(groupedOptions).map(([category, items]) => {
+                            if (items.length === 0) return null;
+                            const isAllSelected = items.every(i => selected.includes(i));
+                            const isSomeSelected = items.some(i => selected.includes(i)) && !isAllSelected;
+
+                            return (
+                                <div key={category} className="border-b border-slate-100 dark:border-slate-700/50 last:border-0 pb-1">
+                                    <div
+                                        className="sticky top-0 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-sm px-3 py-2 flex items-center justify-between cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors z-10"
+                                        onClick={() => toggleCategory(items)}
+                                    >
+                                        <span className="text-[10px] font-black text-[#622F88] dark:text-purple-400 uppercase tracking-widest">{category}</span>
+                                        <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${isAllSelected ? 'bg-[#622F88] border-[#622F88]' : isSomeSelected ? 'bg-purple-200 border-purple-300 dark:bg-purple-900 dark:border-purple-700' : 'bg-white border-slate-300 dark:bg-slate-800 dark:border-slate-600'}`}>
+                                            {isAllSelected && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>}
+                                            {isSomeSelected && <div className="w-1.5 h-1.5 bg-[#622F88] dark:bg-purple-400 rounded-sm"></div>}
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-col py-1">
+                                        {items.map(opt => (
+                                            <label key={opt} className="flex items-center px-4 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer ml-2">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selected.includes(opt)}
+                                                    onChange={() => toggleOption(opt)}
+                                                    className="rounded border-slate-300 text-[#622F88] focus:ring-[#622F88] w-3.5 h-3.5 mr-3"
+                                                />
+                                                <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">{opt}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+                            );
+                        })}
+
                     </div>
                 </>
             )}
@@ -78,13 +106,12 @@ export const MatrixSearch: React.FC = () => {
     const navigate = useNavigate();
     const { isDark, toggleTheme } = useTheme();
 
-    // --- Dynamic Dataverse State ---
-    const [componentsData, setComponentsData] = useState<string[]>([]);
-    const [internalData, setInternalData] = useState<string[]>([]); // NEW: Internal Initiatives State
+    // --- Dynamic Dataverse State (Subcategory Dictionaries) ---
+    const [componentsData, setComponentsData] = useState<Record<string, string[]>>({});
+    const [internalData, setInternalData] = useState<Record<string, string[]>>({});
     const [colleaguesData, setColleaguesData] = useState<Colleague[]>([]);
     const [isLoadingData, setIsLoadingData] = useState(true);
 
-    // View Toggle State
     const [activeView, setActiveView] = useState<MatrixView>('BC');
 
     // Filter State
@@ -95,24 +122,17 @@ export const MatrixSearch: React.FC = () => {
     const [selectedFav, setSelectedFav] = useState('all');
     const [selectedRole, setSelectedRole] = useState('all');
 
-    // Team Builder State
+    // Team Builder & UI State
     const [team, setTeam] = useState<Colleague[]>([]);
     const [showAnalysis, setShowAnalysis] = useState(false);
+    const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
-    // Dynamically calculate unique roles from Dataverse Data
     const uniqueRoles = useMemo(() => {
         return Array.from(new Set(colleaguesData.map(c => c.role))).filter(Boolean).sort();
     }, [colleaguesData]);
 
-    // NEW: Toggles which Dataverse array populates the dropdowns and tables
-    const currentSkillList = activeView === 'BC' ? componentsData : internalData;
-
-    const handleViewChange = (view: MatrixView) => {
-        if (view === activeView) return;
-        setActiveView(view);
-        setSelectedComponents([]);
-        setMinLevel(0);
-    };
+    const currentSkillMap = activeView === 'BC' ? componentsData : internalData;
+    const currentSkillFlatList = useMemo(() => Object.values(currentSkillMap).flat(), [currentSkillMap]);
 
     // --- THE MASTER DATAVERSE FETCH ---
     useEffect(() => {
@@ -120,65 +140,65 @@ export const MatrixSearch: React.FC = () => {
             try {
                 setIsLoadingData(true);
 
-                // 1. Fetch all three tables in parallel for maximum speed
                 const [skillsRes, profilesRes, assessmentsRes] = await Promise.all([
                     Wtw_skilllibrariesService.getAll(),
                     Wtw_colleagueprofilesService.getAll(),
                     Wtw_skillassessmentsService.getAll()
                 ]);
 
-                // Extract array data
                 const skills = skillsRes.data || skillsRes;
                 const profiles = profilesRes.data || profilesRes;
                 const assessments = assessmentsRes.data || assessmentsRes;
 
-                // 2. Build BC Components & Internal Initiatives Lists + Skill GUID Map
                 const skillIdToNameMap: Record<string, string> = {};
-                const bcSkills: string[] = [];
-                const internalSkills: string[] = [];
+                const bcSkillsObj: Record<string, string[]> = {};
+                const internalSkillsObj: Record<string, string[]> = {};
 
                 if (Array.isArray(skills)) {
                     skills.forEach((s: any) => {
                         const name = s.wtw_skillname || s.wtw_name;
-
-                        // Grab category formatted string and integer to safely check
                         const categoryStr = s['wtw_category@OData.Community.Display.V1.FormattedValue'];
                         const categoryInt = s.wtw_category;
+                        const subCategory = s.wtw_subcategory || 'General';
 
                         const isBC = categoryStr === 'BC Components' || categoryInt === 894790000;
-
-                        // IMPORTANT: Update 894790001 to your actual Dataverse Choice integer for Internal Initiatives!
                         const isInternal = categoryStr === 'Internal Initiatives' || categoryInt === 894790001;
 
                         if (name) {
                             skillIdToNameMap[s.wtw_skilllibraryid] = name;
-                            if (isBC) bcSkills.push(name);
-                            if (isInternal) internalSkills.push(name);
+
+                            if (isBC) {
+                                if (!bcSkillsObj[subCategory]) bcSkillsObj[subCategory] = [];
+                                bcSkillsObj[subCategory].push(name);
+                            }
+                            if (isInternal) {
+                                if (!internalSkillsObj[subCategory]) internalSkillsObj[subCategory] = [];
+                                internalSkillsObj[subCategory].push(name);
+                            }
                         }
                     });
 
-                    setComponentsData(bcSkills.sort());
-                    setInternalData(internalSkills.sort()); // Save internal to state
+                    Object.keys(bcSkillsObj).forEach(k => bcSkillsObj[k].sort());
+                    Object.keys(internalSkillsObj).forEach(k => internalSkillsObj[k].sort());
+
+                    setComponentsData(bcSkillsObj);
+                    setInternalData(internalSkillsObj);
                 }
 
-                // 3. Reshape Profiles & Assessments into our clean 'Colleague' Interface
                 if (Array.isArray(profiles) && Array.isArray(assessments)) {
                     const formattedColleagues: Colleague[] = profiles.map((p: any) => {
                         const profileId = p.wtw_colleagueprofileid;
                         const matrix: Record<string, ProficiencyLevel> = {};
                         let favSkill = '';
 
-                        // Find all assessments linked to this specific profile
                         const userAssessments = assessments.filter((a: any) =>
                             a._wtw_colleague_value === profileId ||
                             a._wtw_colleagueprofile_value === profileId
                         );
 
                         userAssessments.forEach((a: any) => {
-                            // Map the Skill ID back to the Skill Name
                             const skillId = a._wtw_skill_value || a._wtw_skilllibrary_value;
                             const skillName = skillIdToNameMap[skillId];
-
                             const levelInt = a.wtw_proficiency;
 
                             if (skillName && levelInt) {
@@ -211,10 +231,28 @@ export const MatrixSearch: React.FC = () => {
         loadAllData();
     }, []);
 
+    const handleViewChange = (view: MatrixView) => {
+        if (view === activeView) return;
+        setActiveView(view);
+        setSelectedComponents([]);
+        setMinLevel(0);
+        setExpandedRows(new Set()); // Close rows on view change
+    };
+
     const toggleComponent = (comp: string) => {
         setSelectedComponents(prev => prev.includes(comp) ? prev.filter(c => c !== comp) : [...prev, comp]);
     };
 
+    const toggleCategory = (categorySkills: string[]) => {
+        const allSelected = categorySkills.every(s => selectedComponents.includes(s));
+        if (allSelected) {
+            setSelectedComponents(prev => prev.filter(s => !categorySkills.includes(s)));
+        } else {
+            setSelectedComponents(prev => Array.from(new Set([...prev, ...categorySkills])));
+        }
+    };
+
+    // UPDATED: Now also clears the team builder 
     const clearFilters = () => {
         setSearchQuery('');
         setSelectedComponents([]);
@@ -222,6 +260,8 @@ export const MatrixSearch: React.FC = () => {
         setIsExactMatch(false);
         setSelectedFav('all');
         setSelectedRole('all');
+        setTeam([]);
+        setExpandedRows(new Set());
     };
 
     const toggleTeamMember = (colleague: Colleague) => {
@@ -232,15 +272,23 @@ export const MatrixSearch: React.FC = () => {
         );
     };
 
+    const toggleRowExpansion = (name: string) => {
+        setExpandedRows(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(name)) newSet.delete(name);
+            else newSet.add(name);
+            return newSet;
+        });
+    };
+
     const handleEditProfile = (colleagueName: string) => {
         const slug = colleagueName.toLowerCase().replace(/\s+/g, '-');
-
         navigate(`/profile/${slug}`);
     };
 
-    // --- Scoring Logic ---
+    // UPDATED: Proper Proportional Scoring Logic
     const calculateMatchScore = (colleague: Colleague) => {
-        if (selectedComponents.length === 0) return 100;
+        if (selectedComponents.length === 0) return 100.00;
 
         let totalScore = 0;
         const targetWeight = minLevel === 0 ? 2 : minLevel;
@@ -255,13 +303,21 @@ export const MatrixSearch: React.FC = () => {
                 if (isExactMatch) {
                     totalScore += (userWeight === targetWeight ? 100 : 0);
                 } else {
-                    const score = Math.min(100, Math.round((userWeight / targetWeight) * 100));
-                    totalScore += score;
+                    if (userWeight === 1) {
+                        totalScore += 0; // N/A is strict 0%
+                    } else if (userWeight >= targetWeight) {
+                        totalScore += 100;
+                    } else {
+                        // Proportional credit based on gap to target
+                        const score = ((userWeight - 1) / (targetWeight - 1)) * 100;
+                        totalScore += score;
+                    }
                 }
             }
         });
 
-        return Math.round(totalScore / selectedComponents.length);
+        // Return exact float to be formatted in UI
+        return totalScore / selectedComponents.length;
     };
 
     const processedColleagues = useMemo(() => {
@@ -275,9 +331,9 @@ export const MatrixSearch: React.FC = () => {
 
             if (selectedComponents.length > 0) {
                 if (c.matchScore === 0) return false;
-                if (isExactMatch && c.matchScore < 100) return false;
+                if (isExactMatch && c.matchScore < 99.99) return false; // Allow floating point precision
             } else if (minLevel > 0) {
-                const relevantSkills = Object.entries(c.matrix).filter(([k]) => currentSkillList.includes(k));
+                const relevantSkills = Object.entries(c.matrix).filter(([k]) => currentSkillFlatList.includes(k));
                 const hasAnyMatchingSkill = relevantSkills.some(([_, lvl]) => {
                     const w = LEVEL_WEIGHTS[lvl as ProficiencyLevel];
                     return isExactMatch ? w === minLevel : w >= minLevel;
@@ -289,7 +345,7 @@ export const MatrixSearch: React.FC = () => {
         });
 
         return scored.sort((a, b) => b.matchScore - a.matchScore || a.role.localeCompare(b.role));
-    }, [colleaguesData, searchQuery, selectedComponents, minLevel, isExactMatch, selectedFav, selectedRole, currentSkillList]);
+    }, [colleaguesData, searchQuery, selectedComponents, minLevel, isExactMatch, selectedFav, selectedRole, currentSkillFlatList]);
 
     // --- GAP Analysis Logic ---
     const getTeamGapAnalysis = () => {
@@ -297,7 +353,7 @@ export const MatrixSearch: React.FC = () => {
         const targetWeight = minLevel === 0 ? 2 : minLevel;
         const targetStr = minLevel === 0 ? 'Any Experience' : LEVEL_LABELS[minLevel];
 
-        return currentSkillList.map(skill => {
+        return currentSkillFlatList.map(skill => {
             const isTargeted = selectedComponents.includes(skill);
 
             const roleBreakdown = presentRoles.map(role => {
@@ -312,7 +368,7 @@ export const MatrixSearch: React.FC = () => {
                         maxWeight = weight;
                         topLevelStr = lvl;
                     }
-                    if (weight >= 4) {
+                    if (weight >= 5) { // Adjusted to Expert/Consulting
                         if (!experts.includes(member.name)) experts.push(member.name);
                     }
                 });
@@ -375,7 +431,6 @@ export const MatrixSearch: React.FC = () => {
 
                 <div className="max-w-[1920px] mx-auto px-6 py-4 flex flex-col gap-5">
 
-                    {/* Segmented Control for View Toggling */}
                     <div className="flex items-center gap-4 border-b border-slate-100 dark:border-slate-700/50 pb-4">
                         <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Active Matrix View</span>
                         <div className="bg-slate-100 dark:bg-slate-900 p-1 rounded-xl inline-flex shadow-inner">
@@ -402,14 +457,15 @@ export const MatrixSearch: React.FC = () => {
                                     Target {activeView === 'BC' ? 'Components' : 'Initiatives'}
                                     {isLoadingData && <span className="animate-pulse text-purple-400">(Loading Dataverse...)</span>}
                                 </label>
-                                <MultiSelectDropdown
-                                    options={currentSkillList}
+                                <GroupedMultiSelectDropdown
+                                    groupedOptions={currentSkillMap}
                                     selected={selectedComponents}
                                     toggleOption={toggleComponent}
+                                    toggleCategory={toggleCategory}
                                 />
                             </div>
 
-                            <div className="flex flex-col w-full sm:w-64">
+                            <div className="flex flex-col w-full sm:w-72">
                                 <div className="flex justify-between items-end mb-2">
                                     <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Level</label>
 
@@ -427,7 +483,7 @@ export const MatrixSearch: React.FC = () => {
 
                                 <div className="relative pt-1">
                                     <input
-                                        type="range" min="0" max="5" step="1"
+                                        type="range" min="0" max="6" step="1"
                                         value={minLevel}
                                         onChange={(e) => setMinLevel(parseInt(e.target.value))}
                                         className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-[#622F88]"
@@ -451,19 +507,12 @@ export const MatrixSearch: React.FC = () => {
                                 </select>
                             </div>
 
-                            <div className="flex flex-col flex-1 sm:flex-none">
-                                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase mb-2 tracking-widest">Fav Skill</label>
-                                <select value={selectedFav} onChange={(e) => setSelectedFav(e.target.value)} className="bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-[11px] font-bold text-[#622F88] dark:text-purple-300 outline-none w-full sm:w-36 appearance-none shadow-sm">
-                                    <option value="all" className="text-slate-700 dark:text-slate-200">Any Favorite</option>
-                                    <option value="ReactJS">♥ ReactJS</option>
-                                    <option value="C#">♥ C#</option>
-                                    <option value="SQL">♥ SQL</option>
-                                    <option value="FUSE">♥ FUSE</option>
-                                    <option value="HW Calc">♥ HW Calc</option>
-                                </select>
-                            </div>
-
-                            <button onClick={clearFilters} className="flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-bold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 rounded-xl transition-all active:scale-95 shadow-sm h-[38px] w-full sm:w-auto">
+                            {/* UPDATED: Clear button type and handler */}
+                            <button
+                                type="button"
+                                onClick={clearFilters}
+                                className="flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-bold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 rounded-xl transition-all active:scale-95 shadow-sm h-[38px] w-full sm:w-auto"
+                            >
                                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
                                 Clear
                             </button>
@@ -475,11 +524,9 @@ export const MatrixSearch: React.FC = () => {
             {/* Main Content Area (Table + Cart) */}
             <main className="flex-1 flex overflow-hidden max-w-[1920px] mx-auto w-full relative z-10">
 
-                {/* Scrollable Table */}
                 <div className={`flex-1 overflow-y-auto p-6 transition-all duration-300 ${team.length > 0 ? 'pr-[340px] xl:pr-6' : ''}`}>
                     <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden min-h-[50vh] relative">
 
-                        {/* Loading State Overlay */}
                         {isLoadingData && (
                             <div className="absolute inset-0 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm z-20 flex flex-col items-center justify-center">
                                 <div className="w-10 h-10 border-4 border-purple-200 border-t-[#622F88] rounded-full animate-spin mb-4"></div>
@@ -488,8 +535,10 @@ export const MatrixSearch: React.FC = () => {
                         )}
 
                         <table className="w-full text-left">
+                            {/* UPDATED: Added Expansion Toggle Column */}
                             <thead className="bg-slate-50/90 dark:bg-slate-900/90 sticky top-0 z-10 backdrop-blur-md">
                                 <tr>
+                                    <th className="w-10 p-5 border-b-2 border-slate-100 dark:border-slate-700/50"></th>
                                     {selectedComponents.length > 0 && !isExactMatch && (
                                         <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b-2 border-slate-100 dark:border-slate-700/50 w-24">Match</th>
                                     )}
@@ -500,98 +549,150 @@ export const MatrixSearch: React.FC = () => {
                                     <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b-2 border-slate-100 dark:border-slate-700/50 text-right">Actions</th>
                                 </tr>
                             </thead>
+
+                            {/* UPDATED: Collapsible Rows Implementation */}
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                                 {!isLoadingData && processedColleagues.length === 0 ? (
-                                    <tr><td colSpan={5} className="p-8 text-center text-slate-400 text-sm font-semibold">No colleagues found matching your exact criteria.</td></tr>
+                                    <tr><td colSpan={6} className="p-8 text-center text-slate-400 text-sm font-semibold">No colleagues found matching your exact criteria.</td></tr>
                                 ) : processedColleagues.map((c) => {
                                     const isSelected = team.some(m => m.name === c.name);
+                                    const isExpanded = expandedRows.has(c.name);
+
+                                    // Smart Summary Logic: Target skills > Highly rated > Alpha
+                                    const userSkillsInView = Object.entries(c.matrix)
+                                        .filter(([k]) => currentSkillFlatList.includes(k))
+                                        .sort((a, b) => {
+                                            const aTarget = selectedComponents.includes(a[0]) ? 1 : 0;
+                                            const bTarget = selectedComponents.includes(b[0]) ? 1 : 0;
+                                            if (aTarget !== bTarget) return bTarget - aTarget;
+
+                                            const weightDiff = LEVEL_WEIGHTS[b[1] as ProficiencyLevel] - LEVEL_WEIGHTS[a[1] as ProficiencyLevel];
+                                            if (weightDiff !== 0) return weightDiff;
+
+                                            return a[0].localeCompare(b[0]);
+                                        });
+
+                                    // Cap row height by summarizing top 10
+                                    const summarySkills = userSkillsInView.slice(0, 10);
+                                    const hiddenCount = userSkillsInView.length - summarySkills.length;
+                                    const totalColumns = (selectedComponents.length > 0 && !isExactMatch) ? 5 : 4;
 
                                     return (
-                                        <tr key={c.name} className={`hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors ${isSelected ? 'bg-purple-50/50 dark:bg-purple-900/10' : ''}`}>
+                                        <React.Fragment key={c.name}>
+                                            <tr className={`hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors ${isSelected ? 'bg-purple-50/50 dark:bg-purple-900/10' : ''}`}>
 
-                                            {/* Match Score Column */}
-                                            {selectedComponents.length > 0 && !isExactMatch && (
-                                                <td className="p-5">
-                                                    <div className="flex flex-col gap-1.5">
-                                                        <span className={`text-xs font-black ${c.matchScore === 100 ? 'text-emerald-500' : c.matchScore >= 50 ? 'text-amber-500' : 'text-red-400'}`}>
-                                                            {c.matchScore}%
-                                                        </span>
-                                                        <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                                                            <div className={`h-full ${c.matchScore === 100 ? 'bg-emerald-500' : c.matchScore >= 50 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${c.matchScore}%` }}></div>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                            )}
-
-                                            <td className="p-5">
-                                                <div className="font-bold text-slate-900 dark:text-slate-100 text-sm">{c.name}</div>
-                                                <div className="text-[10px] text-[#622F88] dark:text-purple-400 font-black uppercase mt-0.5 tracking-widest">{c.role}</div>
-                                            </td>
-                                            <td className="p-5">
-                                                <div className="flex flex-wrap gap-1.5 items-center">
-                                                    {Object.entries(c.matrix)
-                                                        .filter(([k]) => currentSkillList.includes(k))
-                                                        .sort((a, b) => {
-                                                            const aTarget = selectedComponents.includes(a[0]) ? 1 : 0;
-                                                            const bTarget = selectedComponents.includes(b[0]) ? 1 : 0;
-                                                            return bTarget - aTarget;
-                                                        })
-                                                        .map(([k, v]) => {
-                                                            const isTargeted = selectedComponents.includes(k);
-
-                                                            let activeClasses = '';
-                                                            if (isTargeted) {
-                                                                activeClasses = 'bg-[#622F88] text-white shadow-md ring-2 ring-purple-300 dark:ring-purple-700 scale-105';
-                                                            } else if (v === 'N/A') {
-                                                                activeClasses = 'bg-slate-100 text-slate-400 border border-slate-200 dark:bg-slate-800 dark:text-slate-500 dark:border-slate-700 opacity-60';
-                                                            } else {
-                                                                activeClasses = 'bg-[#EEF2FF] text-[#4338CA] border border-[#C7D2FE] dark:bg-[#4338CA]/20 dark:text-[#818CF8] dark:border-[#6366f1]/30 opacity-70 hover:opacity-100';
-                                                            }
-
-                                                            return <span key={k} className={`text-[9px] font-bold px-2.5 py-1 rounded-md transition-all duration-300 ${activeClasses}`}>{k} ({v})</span>
-                                                        })}
-                                                </div>
-                                            </td>
-                                            <td className="p-5">
-                                                {/* Action Buttons Container */}
-                                                <div className="flex justify-end items-center gap-2">
-                                                    {/* Edit Button */}
+                                                <td className="p-3 align-middle text-center">
                                                     <button
-                                                        onClick={() => handleEditProfile(c.name)}
-                                                        className="p-1.5 rounded-lg text-slate-400 hover:text-[#622F88] hover:bg-purple-50 dark:hover:text-purple-300 dark:hover:bg-purple-900/20 transition-colors"
-                                                        title={`Edit ${c.name}'s Profile`}
+                                                        onClick={() => toggleRowExpansion(c.name)}
+                                                        className="p-1.5 rounded-lg text-slate-400 hover:text-[#622F88] hover:bg-purple-50 dark:hover:text-purple-300 dark:hover:bg-purple-900/20 transition-all"
                                                     >
-                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                                        <svg className={`w-5 h-5 transition-transform duration-200 ${isExpanded ? 'rotate-180 text-[#622F88] dark:text-purple-400' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
                                                         </svg>
                                                     </button>
+                                                </td>
 
-                                                    {/* Add/Remove Button */}
-                                                    <button
-                                                        onClick={() => toggleTeamMember(c)}
-                                                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95 ${isSelected
-                                                            ? 'bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-300'
-                                                            : 'bg-[#622F88] text-white hover:bg-[#4C1D95] shadow-sm'}`}
-                                                    >
-                                                        {isSelected ? (
-                                                            <>
-                                                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                                                                </svg>
-                                                                Remove
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-                                                                </svg>
-                                                                Shortlist
-                                                            </>
+                                                {selectedComponents.length > 0 && !isExactMatch && (
+                                                    <td className="p-5 align-middle">
+                                                        <div className="flex flex-col gap-1.5 w-16">
+                                                            <span className={`text-xs font-black ${c.matchScore >= 99.99 ? 'text-emerald-500' : c.matchScore >= 50 ? 'text-amber-500' : 'text-red-400'}`}>
+                                                                {/* Formatting enforced to 2 decimals */}
+                                                                {c.matchScore.toFixed(2)}%
+                                                            </span>
+                                                            <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                                                <div className={`h-full ${c.matchScore >= 99.99 ? 'bg-emerald-500' : c.matchScore >= 50 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${c.matchScore}%` }}></div>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                )}
+
+                                                <td className="p-5 align-middle">
+                                                    <div className="font-bold text-slate-900 dark:text-slate-100 text-sm">{c.name}</div>
+                                                    <div className="text-[10px] text-[#622F88] dark:text-purple-400 font-black uppercase mt-0.5 tracking-widest">{c.role}</div>
+                                                </td>
+
+                                                <td className="p-5 align-middle">
+                                                    <div className="flex flex-wrap gap-1.5 items-center">
+                                                        {summarySkills.length === 0 && (
+                                                            <span className="text-[10px] font-semibold text-slate-400 italic">No skills recorded.</span>
                                                         )}
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
+                                                        {summarySkills.map(([k, v]) => {
+                                                            const isTargeted = selectedComponents.includes(k);
+                                                            let activeClasses = isTargeted
+                                                                ? 'bg-[#622F88] text-white shadow-md ring-1 ring-purple-300 dark:ring-purple-700'
+                                                                : v === 'N/A'
+                                                                    ? 'bg-slate-100 text-slate-400 border border-slate-200 dark:bg-slate-800 dark:text-slate-500 dark:border-slate-700 opacity-60'
+                                                                    : 'bg-[#EEF2FF] text-[#4338CA] border border-[#C7D2FE] dark:bg-[#4338CA]/20 dark:text-[#818CF8] dark:border-[#6366f1]/30 opacity-80';
+
+                                                            return <span key={k} className={`text-[9px] font-bold px-2 py-1 rounded transition-all ${activeClasses}`}>{k} ({v})</span>
+                                                        })}
+                                                        {hiddenCount > 0 && (
+                                                            <button
+                                                                onClick={() => toggleRowExpansion(c.name)}
+                                                                className="text-[9px] font-black text-slate-500 hover:text-[#622F88] dark:text-slate-400 dark:hover:text-purple-300 px-2 py-1 bg-slate-100 hover:bg-purple-50 dark:bg-slate-800 dark:hover:bg-slate-700 rounded transition-colors"
+                                                            >
+                                                                +{hiddenCount} more
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </td>
+
+                                                <td className="p-5 align-middle">
+                                                    <div className="flex justify-end items-center gap-2">
+                                                        <button onClick={() => handleEditProfile(c.name)} className="p-1.5 rounded-lg text-slate-400 hover:text-[#622F88] hover:bg-purple-50 dark:hover:text-purple-300 dark:hover:bg-purple-900/20 transition-colors" title={`Edit ${c.name}'s Profile`}>
+                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                                                        </button>
+                                                        <button onClick={() => toggleTeamMember(c)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95 ${isSelected ? 'bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-300' : 'bg-[#622F88] text-white hover:bg-[#4C1D95] shadow-sm'}`}>
+                                                            {isSelected ? <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg> Remove</> : <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg> Shortlist</>}
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+
+                                            {/* Expanded Matrix View rendering entire skill dictionary */}
+                                            {isExpanded && (
+                                                <tr className="bg-slate-50/80 dark:bg-slate-900/40 border-b border-slate-200 dark:border-slate-700 shadow-inner">
+                                                    <td colSpan={totalColumns + 1} className="p-0">
+                                                        <div className="px-6 py-6 sm:px-16 lg:px-24 w-full">
+                                                            <h4 className="text-[10px] font-black text-[#622F88] dark:text-purple-400 uppercase tracking-widest mb-4 border-b border-purple-100 dark:border-purple-900/30 pb-2">
+                                                                Full Matrix Profile
+                                                            </h4>
+                                                            <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-x-8 gap-y-6">
+                                                                {Object.entries(currentSkillMap).map(([subCat, categorySkills]) => {
+                                                                    const userSkillsInCategory = Object.entries(c.matrix)
+                                                                        .filter(([k]) => categorySkills.includes(k))
+                                                                        .sort((a, b) => {
+                                                                            const aTarget = selectedComponents.includes(a[0]) ? 1 : 0;
+                                                                            const bTarget = selectedComponents.includes(b[0]) ? 1 : 0;
+                                                                            return bTarget - aTarget;
+                                                                        });
+
+                                                                    if (userSkillsInCategory.length === 0) return null;
+
+                                                                    return (
+                                                                        <div key={subCat} className="flex flex-col gap-2">
+                                                                            <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">{subCat}</span>
+                                                                            <div className="flex flex-wrap gap-1.5 items-center">
+                                                                                {userSkillsInCategory.map(([k, v]) => {
+                                                                                    const isTargeted = selectedComponents.includes(k);
+                                                                                    let activeClasses = isTargeted
+                                                                                        ? 'bg-[#622F88] text-white shadow-md'
+                                                                                        : v === 'N/A'
+                                                                                            ? 'bg-white text-slate-400 border border-slate-200 dark:bg-slate-800 dark:text-slate-500 dark:border-slate-700 opacity-60'
+                                                                                            : 'bg-white text-[#4338CA] border border-[#C7D2FE] dark:bg-slate-800 dark:text-[#818CF8] dark:border-[#6366f1]/30';
+
+                                                                                    return <span key={k} className={`text-[9px] font-bold px-2.5 py-1 rounded-md transition-all ${activeClasses}`}>{k} ({v})</span>
+                                                                                })}
+                                                                            </div>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </React.Fragment>
                                     );
                                 })}
                             </tbody>
@@ -637,7 +738,7 @@ export const MatrixSearch: React.FC = () => {
             {/* TEAM GAP ANALYSIS MODAL */}
             {showAnalysis && (
                 <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 sm:p-6 opacity-100 transition-opacity">
-                    <div className="bg-slate-50 dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden border border-slate-200 dark:border-slate-700 transform transition-all scale-100">
+                    <div className="bg-slate-50 dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-7xl max-h-[90vh] flex flex-col overflow-hidden border border-slate-200 dark:border-slate-700 transform transition-all scale-100">
 
                         <div className="px-6 py-5 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900 shrink-0">
                             <div>
@@ -653,7 +754,6 @@ export const MatrixSearch: React.FC = () => {
 
                         <div className="p-6 overflow-y-auto flex-1">
 
-                            {/* Project Requirements Overview */}
                             {hasActiveTargets && (
                                 <div className="mb-8 p-5 bg-[#EEF2FF] dark:bg-indigo-900/20 border border-[#C7D2FE] dark:border-indigo-800 rounded-2xl">
                                     <h3 className="text-xs font-black text-indigo-800 dark:text-indigo-400 uppercase tracking-widest mb-3 flex items-center gap-2">
@@ -673,71 +773,89 @@ export const MatrixSearch: React.FC = () => {
                                 </div>
                             )}
 
-                            {/* Gap Analysis Grid */}
-                            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                                {currentGapAnalysis
-                                    .sort((a, b) => (a.isTargeted === b.isTargeted) ? 0 : a.isTargeted ? -1 : 1)
-                                    .map((item) => (
-                                        <div key={item.skill} className={`p-5 rounded-2xl border shadow-sm flex flex-col gap-4 relative overflow-hidden transition-all ${item.isTargeted && item.overallGap
-                                            ? 'bg-red-50/50 dark:bg-red-900/10 border-red-200 dark:border-red-900/50 ring-1 ring-red-500/20'
-                                            : item.isTargeted
-                                                ? 'bg-white dark:bg-slate-800 border-[#622F88]/30 dark:border-purple-500/30 ring-1 ring-[#622F88]/10'
-                                                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
-                                            }`}>
+                            <div className="flex flex-col gap-10">
+                                {Object.entries(currentSkillMap).map(([subCat, skills]) => {
+                                    const relevantGaps = currentGapAnalysis.filter(g => skills.includes(g.skill));
 
-                                            {item.isTargeted && (
-                                                <div className={`absolute top-0 right-0 px-3 py-1 text-[9px] font-black uppercase tracking-widest rounded-bl-lg ${item.overallGap ? 'bg-red-500 text-white' : 'bg-emerald-500 text-white'}`}>
-                                                    {item.overallGap ? 'GAP DETECTED' : 'COVERED'}
-                                                </div>
-                                            )}
+                                    const hasTargetsInCategory = relevantGaps.some(g => g.isTargeted);
+                                    if (hasActiveTargets && !hasTargetsInCategory) return null;
+                                    if (relevantGaps.length === 0) return null;
 
-                                            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 border-b border-slate-100 dark:border-slate-700 pb-3 flex items-center gap-2">
-                                                {item.skill}
-                                            </h3>
+                                    return (
+                                        <div key={subCat}>
+                                            <div className="flex items-center gap-3 mb-4">
+                                                <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest">{subCat}</h3>
+                                                <div className="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
+                                            </div>
 
-                                            <div className="flex flex-col gap-4 mt-1">
-                                                {item.roleBreakdown.map(rc => (
-                                                    <div key={rc.role} className="flex items-start gap-3">
-                                                        <span className="w-16 shrink-0 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider mt-0.5 truncate" title={rc.role}>
-                                                            {rc.role}
-                                                        </span>
+                                            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                                                {relevantGaps
+                                                    .sort((a, b) => (a.isTargeted === b.isTargeted) ? 0 : a.isTargeted ? -1 : 1)
+                                                    .map((item) => (
+                                                        <div key={item.skill} className={`p-5 rounded-2xl border shadow-sm flex flex-col gap-4 relative overflow-hidden transition-all ${item.isTargeted && item.overallGap
+                                                            ? 'bg-red-50/50 dark:bg-red-900/10 border-red-200 dark:border-red-900/50 ring-1 ring-red-500/20'
+                                                            : item.isTargeted
+                                                                ? 'bg-white dark:bg-slate-800 border-[#622F88]/30 dark:border-purple-500/30 ring-1 ring-[#622F88]/10'
+                                                                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+                                                            }`}>
 
-                                                        <div className="flex-1 flex flex-col gap-1.5">
-                                                            <div className="flex items-center gap-3">
-                                                                <div className="flex-1 flex gap-1 h-2 opacity-90">
-                                                                    {[1, 2, 3, 4, 5].map(segment => {
-                                                                        let color = 'bg-slate-100 dark:bg-slate-700';
-                                                                        if (rc.maxWeight >= segment) {
-                                                                            color = rc.maxWeight >= 4 ? 'bg-emerald-400' : rc.maxWeight >= 2 ? 'bg-[#622F88] dark:bg-purple-500' : 'bg-amber-400';
-                                                                        }
-                                                                        return <div key={segment} className={`flex-1 rounded-sm transition-colors duration-500 ${color}`}></div>
-                                                                    })}
+                                                            {item.isTargeted && (
+                                                                <div className={`absolute top-0 right-0 px-3 py-1 text-[9px] font-black uppercase tracking-widest rounded-bl-lg ${item.overallGap ? 'bg-red-500 text-white' : 'bg-emerald-500 text-white'}`}>
+                                                                    {item.overallGap ? 'GAP DETECTED' : 'COVERED'}
                                                                 </div>
-                                                                <span className={`w-8 text-right text-[10px] font-black ${rc.maxWeight >= 4 ? 'text-emerald-500' : rc.maxWeight === 0 || rc.maxWeight === 1 ? 'text-red-400' : 'text-slate-500 dark:text-slate-400'}`}>
-                                                                    {rc.topLevelStr === 'Missing' ? 'N/A' : rc.topLevelStr}
-                                                                </span>
-                                                            </div>
+                                                            )}
 
-                                                            <div className="min-h-[16px]">
-                                                                {rc.experts.length > 0 ? (
-                                                                    <div className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 line-clamp-1">
-                                                                        Experts: <span className="text-slate-600 dark:text-slate-300">{rc.experts.join(', ')}</span>
+                                                            <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 border-b border-slate-100 dark:border-slate-700 pb-3 flex items-center gap-2">
+                                                                {item.skill}
+                                                            </h4>
+
+                                                            <div className="flex flex-col gap-4 mt-1">
+                                                                {item.roleBreakdown.map(rc => (
+                                                                    <div key={rc.role} className="flex items-start gap-3">
+                                                                        <span className="w-16 shrink-0 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider mt-0.5 truncate" title={rc.role}>
+                                                                            {rc.role}
+                                                                        </span>
+
+                                                                        <div className="flex-1 flex flex-col gap-1.5">
+                                                                            <div className="flex items-center gap-3">
+                                                                                <div className="flex-1 flex gap-1 h-2 opacity-90">
+                                                                                    {[1, 2, 3, 4, 5].map(segment => {
+                                                                                        let color = 'bg-slate-100 dark:bg-slate-700';
+                                                                                        if (rc.maxWeight >= segment) {
+                                                                                            color = rc.maxWeight >= 4 ? 'bg-emerald-400' : rc.maxWeight >= 2 ? 'bg-[#622F88] dark:bg-purple-500' : 'bg-amber-400';
+                                                                                        }
+                                                                                        return <div key={segment} className={`flex-1 rounded-sm transition-colors duration-500 ${color}`}></div>
+                                                                                    })}
+                                                                                </div>
+                                                                                <span className={`w-14 text-right text-[10px] font-black ${rc.maxWeight >= 4 ? 'text-emerald-500' : rc.maxWeight === 0 || rc.maxWeight === 1 ? 'text-red-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                                                                                    {rc.topLevelStr === 'Missing' ? 'N/A' : rc.topLevelStr}
+                                                                                </span>
+                                                                            </div>
+
+                                                                            <div className="min-h-[16px]">
+                                                                                {rc.experts.length > 0 ? (
+                                                                                    <div className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 line-clamp-1">
+                                                                                        Experts: <span className="text-slate-600 dark:text-slate-300">{rc.experts.join(', ')}</span>
+                                                                                    </div>
+                                                                                ) : (item.isTargeted && rc.hasGap) ? (
+                                                                                    <div className="text-[9px] font-bold text-red-500/80 dark:text-red-400/80">
+                                                                                        Role does not meet target ({item.targetStr})
+                                                                                    </div>
+                                                                                ) : null}
+                                                                            </div>
+                                                                        </div>
                                                                     </div>
-                                                                ) : (item.isTargeted && rc.hasGap) ? (
-                                                                    <div className="text-[9px] font-bold text-red-500/80 dark:text-red-400/80">
-                                                                        Role does not meet target ({item.targetStr})
-                                                                    </div>
-                                                                ) : null}
+                                                                ))}
                                                             </div>
                                                         </div>
-                                                    </div>
-                                                ))}
+                                                    ))}
                                             </div>
                                         </div>
-                                    ))}
+                                    );
+                                })}
                             </div>
-                        </div>
 
+                        </div>
                     </div>
                 </div>
             )}

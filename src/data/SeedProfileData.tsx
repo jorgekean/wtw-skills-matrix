@@ -4,27 +4,29 @@ import { Wtw_skilllibrariesService } from '../generated/services/Wtw_skilllibrar
 import { Wtw_colleagueprofilesService } from '../generated/services/Wtw_colleagueprofilesService';
 import { Wtw_skillassessmentsService } from '../generated/services/Wtw_skillassessmentsService';
 
+// UPDATED SAMPLES: Replaced old skill names with your new library names, and updated to the 6-tier scale
 const SAMPLES = [
-    { name: "Alice Thompson", role: "DEV", fav: "ReactJS", tech: ["C#", "ReactJS", "SQL"], matrix: { "Automation": "U", "Billing": "N/A", "Carriers - BC3": "N/A", "Carriers - BC4": "I", "CMS": "L", "COBRA": "N/A", "Conversion": "O", "Data Warehouse": "I", "EOI": "L", "ESS": "O", "ESS Evaluate": "U", "ESS Mobile": "O", "Events": "U", "HW Calc": "O", "Import": "U", "Payroll": "N/A", "Pers Comms": "N/A", "Premiums": "I", "Reports": "I", "Web Admin": "L", "Validation": "L", "Individual Marketplace": "N/A", "FUSE": "O", "Test Tracker": "N/A", "MARS": "N/A", "Saturn": "L", "Gov Portal": "N/A", "SLA": "I", "Aura Tool": "U", "Project Eureka": "O" } },
-    { name: "Mark Sullivan", role: "QA", fav: "SQL", tech: ["SQL", "Power Apps"], matrix: { "Automation": "I", "Billing": "L", "Carriers - BC3": "L", "Carriers - BC4": "L", "CMS": "I", "COBRA": "O", "Conversion": "I", "Data Warehouse": "U", "EOI": "N/A", "ESS": "I", "ESS Evaluate": "L", "ESS Mobile": "N/A", "Events": "I", "HW Calc": "I", "Import": "L", "Payroll": "L", "Pers Comms": "L", "Premiums": "U", "Reports": "U", "Web Admin": "I", "Validation": "O", "Individual Marketplace": "L", "FUSE": "L", "Test Tracker": "O", "MARS": "U", "Saturn": "U", "Gov Portal": "I", "SLA": "N/A", "Aura Tool": "N/A", "Project Eureka": "N/A" } },
-    { name: "Sita Patel", role: "BA", fav: "Pers Comms", tech: ["Excel", "Visio"], matrix: { "Automation": "L", "Billing": "U", "Carriers - BC3": "U", "Carriers - BC4": "U", "CMS": "O", "COBRA": "L", "Conversion": "I", "Data Warehouse": "N/A", "EOI": "U", "ESS": "L", "ESS Evaluate": "I", "ESS Mobile": "L", "Events": "L", "HW Calc": "I", "Import": "N/A", "Payroll": "O", "Pers Comms": "O", "Premiums": "U", "Reports": "U", "Web Admin": "U", "Validation": "N/A", "Individual Marketplace": "O", "FUSE": "N/A", "Test Tracker": "N/A", "MARS": "L", "Saturn": "N/A", "Gov Portal": "U", "SLA": "O", "Aura Tool": "I", "Project Eureka": "N/A" } },
-    { name: "James Wilson", role: "DEV", fav: "C#", tech: ["C#", "SQL", "Azure"], matrix: { "Automation": "O", "Billing": "N/A", "Carriers - BC3": "I", "Carriers - BC4": "I", "CMS": "L", "COBRA": "I", "Conversion": "L", "Data Warehouse": "O", "EOI": "N/A", "ESS": "U", "ESS Evaluate": "L", "ESS Mobile": "I", "Events": "I", "HW Calc": "L", "Import": "O", "Payroll": "I", "Pers Comms": "U", "Premiums": "L", "Reports": "L", "Web Admin": "O", "Validation": "I", "Individual Marketplace": "N/A", "FUSE": "U", "Test Tracker": "N/A", "MARS": "N/A", "Saturn": "I", "Gov Portal": "N/A", "SLA": "L", "Aura Tool": "N/A", "Project Eureka": "I" } },
-    { name: "Elena Rodriguez", role: "QA", fav: "Test Tracker", tech: ["Selenium", "SQL"], matrix: { "Automation": "O", "Billing": "I", "Carriers - BC3": "I", "Carriers - BC4": "N/A", "CMS": "I", "COBRA": "I", "Conversion": "N/A", "Data Warehouse": "L", "EOI": "L", "ESS": "U", "ESS Evaluate": "O", "ESS Mobile": "U", "Events": "U", "HW Calc": "N/A", "Import": "I", "Payroll": "I", "Pers Comms": "I", "Premiums": "N/A", "Reports": "L", "Web Admin": "I", "Validation": "O", "Individual Marketplace": "I", "FUSE": "I", "Test Tracker": "O", "MARS": "I", "Saturn": "I", "Gov Portal": "N/A", "SLA": "N/A", "Aura Tool": "I", "Project Eureka": "N/A" } },
-    { name: "Chen Wei", role: "DEV", fav: "ReactJS", tech: ["ReactJS", "NodeJS"], matrix: { "Automation": "L", "Billing": "N/A", "Carriers - BC3": "N/A", "Carriers - BC4": "N/A", "CMS": "U", "COBRA": "N/A", "Conversion": "O", "Data Warehouse": "N/A", "EOI": "N/A", "ESS": "O", "ESS Evaluate": "O", "ESS Mobile": "O", "Events": "L", "HW Calc": "U", "Import": "L", "Payroll": "N/A", "Pers Comms": "N/A", "Premiums": "L", "Reports": "N/A", "Web Admin": "U", "Validation": "L", "Individual Marketplace": "U", "FUSE": "L", "Test Tracker": "I", "MARS": "O", "Saturn": "I", "Gov Portal": "N/A", "SLA": "N/A", "Aura Tool": "U", "Project Eureka": "L" } },
-    { name: "Sarah Jenkins", role: "BA", fav: "Gov Portal", tech: ["SQL", "Tableau"], matrix: { "Automation": "I", "Billing": "O", "Carriers - BC3": "O", "Carriers - BC4": "O", "CMS": "L", "COBRA": "O", "Conversion": "N/A", "Data Warehouse": "U", "EOI": "O", "ESS": "I", "ESS Evaluate": "N/A", "ESS Mobile": "N/A", "Events": "N/A", "HW Calc": "N/A", "Import": "N/A", "Payroll": "O", "Pers Comms": "I", "Premiums": "O", "Reports": "O", "Web Admin": "I", "Validation": "I", "Individual Marketplace": "O", "FUSE": "N/A", "Test Tracker": "N/A", "MARS": "L", "Saturn": "I", "Gov Portal": "O", "SLA": "L", "Aura Tool": "N/A", "Project Eureka": "I" } },
-    { name: "Tom Baker", role: "Project Manager", fav: "Aura Tool", tech: ["C#", "Architecture"], matrix: { "Automation": "U", "Billing": "L", "Carriers - BC3": "L", "Carriers - BC4": "L", "CMS": "U", "COBRA": "I", "Conversion": "O", "Data Warehouse": "O", "EOI": "I", "ESS": "L", "ESS Evaluate": "L", "ESS Mobile": "L", "Events": "L", "HW Calc": "O", "Import": "L", "Payroll": "L", "Pers Comms": "L", "Premiums": "U", "Reports": "U", "Web Admin": "O", "Validation": "U", "Individual Marketplace": "I", "FUSE": "L", "Test Tracker": "I", "MARS": "N/A", "Saturn": "N/A", "Gov Portal": "L", "SLA": "I", "Aura Tool": "O", "Project Eureka": "U" } },
-    { name: "Amira Hassan", role: "DEV", fav: "FUSE", tech: ["C#", "ReactJS"], matrix: { "Automation": "U", "Billing": "I", "Carriers - BC3": "N/A", "Carriers - BC4": "N/A", "CMS": "O", "COBRA": "N/A", "Conversion": "I", "Data Warehouse": "L", "EOI": "N/A", "ESS": "U", "ESS Evaluate": "I", "ESS Mobile": "U", "Events": "I", "HW Calc": "I", "Import": "L", "Payroll": "I", "Pers Comms": "U", "Premiums": "I", "Reports": "N/A", "Web Admin": "O", "Validation": "I", "Individual Marketplace": "L", "FUSE": "U", "Test Tracker": "N/A", "MARS": "I", "Saturn": "L", "Gov Portal": "N/A", "SLA": "N/A", "Aura Tool": "L", "Project Eureka": "U" } },
-    { name: "Lucia Rossi", role: "BA", fav: "SLA", tech: ["Excel", "Jira"], matrix: { "Automation": "I", "Billing": "U", "Carriers - BC3": "U", "Carriers - BC4": "U", "CMS": "L", "COBRA": "U", "Conversion": "N/A", "Data Warehouse": "I", "EOI": "O", "ESS": "L", "ESS Evaluate": "I", "ESS Mobile": "N/A", "Events": "N/A", "HW Calc": "N/A", "Import": "N/A", "Payroll": "U", "Pers Comms": "L", "Premiums": "U", "Reports": "I", "Web Admin": "L", "Validation": "I", "Individual Marketplace": "U", "FUSE": "N/A", "Test Tracker": "I", "MARS": "I", "Saturn": "N/A", "Gov Portal": "O", "SLA": "O", "Aura Tool": "N/A", "Project Eureka": "N/A" } },
+    { name: "Alice Thompson", role: "DEV", fav: "ESS New", tech: ["C#", "ReactJS", "SQL"], matrix: { "Eligibility": "Expert", "30-Hour calculation": "Experience", "WTW Standard Conversion Layout": "Consulting", "Hours import": "Experience", "ESS New": "Expert", "Triggers": "Potential", "SSRS Reporting": "N/A" } },
+    { name: "Mark Sullivan", role: "QA", fav: "Validation", tech: ["SQL", "Power Apps"], matrix: { "Eligibility": "Exposure", "30-Hour calculation": "Potential", "WTW Standard Conversion Layout": "N/A", "Validation": "Consulting", "ESS New": "Experience", "Triggers": "Expert", "SSRS Reporting": "Experience" } },
+    { name: "Sita Patel", role: "BA", fav: "Triggers", tech: ["Excel", "Visio"], matrix: { "Eligibility": "Experience", "30-Hour calculation": "Expert", "WTW Standard Conversion Layout": "Exposure", "Hours import": "N/A", "ESS New": "Experience", "Triggers": "Consulting", "SSRS Reporting": "Expert" } },
+    // { name: "James Wilson", role: "DEV", fav: "WTW Standard Conversion Layout", tech: ["C#", "SQL", "Azure"], matrix: { "Eligibility": "Potential", "30-Hour calculation": "N/A", "WTW Standard Conversion Layout": "Expert", "Hours import": "Consulting", "ESS New": "Exposure", "Triggers": "Experience", "SSRS Reporting": "Potential" } },
+    // { name: "Elena Rodriguez", role: "QA", fav: "ATT (SQL)", tech: ["Selenium", "SQL"], matrix: { "Eligibility": "Expert", "30-Hour calculation": "Experience", "Validation": "Consulting", "ATT (SQL)": "Expert", "SSO In": "Experience", "Triggers": "Exposure", "Izenda": "Potential" } },
+    // { name: "Chen Wei", role: "DEV", fav: "SSO In", tech: ["ReactJS", "NodeJS"], matrix: { "Eligibility": "Experience", "30-Hour calculation": "N/A", "WTW Standard Conversion Layout": "Consulting", "Hours import": "N/A", "SSO In": "Expert", "Triggers": "Experience", "SSRS Reporting": "N/A" } },
+    // { name: "Sarah Jenkins", role: "BA", fav: "SSRS Reporting", tech: ["SQL", "Tableau"], matrix: { "Eligibility": "Potential", "30-Hour calculation": "Consulting", "WTW Standard Conversion Layout": "Experience", "Hours import": "Exposure", "ESS New": "Potential", "Triggers": "N/A", "SSRS Reporting": "Consulting" } },
+    // { name: "Tom Baker", role: "Project Manager", fav: "Simon Integration", tech: ["C#", "Architecture"], matrix: { "Eligibility": "Experience", "30-Hour calculation": "Experience", "WTW Standard Conversion Layout": "Experience", "Simon Integration": "Expert", "ESS New": "Experience", "Triggers": "Experience", "SSRS Reporting": "Exposure" } },
+    // { name: "Amira Hassan", role: "DEV", fav: "Hours import", tech: ["C#", "ReactJS"], matrix: { "Eligibility": "Expert", "30-Hour calculation": "Potential", "WTW Standard Conversion Layout": "N/A", "Hours import": "Consulting", "ESS New": "Expert", "Triggers": "Potential", "SSRS Reporting": "N/A" } },
+    // { name: "Lucia Rossi", role: "BA", fav: "Eligibility", tech: ["Excel", "Jira"], matrix: { "Eligibility": "Consulting", "30-Hour calculation": "Experience", "WTW Standard Conversion Layout": "Potential", "Hours import": "N/A", "ESS New": "Experience", "Triggers": "Exposure", "SSRS Reporting": "Experience" } },
 ];
 
-// !!! IMPORTANT: YOU MUST REPLACE THESE 0s WITH YOUR ACTUAL DATAVERSE CHOICE INTEGERS !!!
-// You can find these by looking at the "Choices" menu in your Power Apps environment.
+// UPDATED PROFICIENCY MAP: Uses your 6 new choices.
+// !!! IMPORTANT: Verify these exact integers match your Dataverse Choice column !!!
 const PROFICIENCY_MAP: Record<string, number> = {
-    'N/A': 894790000, // Replace 0 with the integer for Needs Training
-    'I': 894790001,   // Replace 0 with the integer for Trained (I)
-    'L': 894790002,   // Replace 0 with the integer for Experienced (L)
-    'U': 894790003,   // Replace 0 with the integer for Proficient (U)
-    'O': 894790004    // Replace 0 with the integer for Expert (O)
+    'N/A': 894790000,
+    'Potential': 894790001,
+    'Exposure': 894790002,
+    'Experience': 894790003,
+    'Expert': 894790004,
+    'Consulting': 894790005
 };
 
 export function SeedColleagues() {
@@ -62,6 +64,7 @@ export function SeedColleagues() {
 
                 const profileId = (profileResult as any)?.wtw_colleagueprofileid || profileResult?.data?.wtw_colleagueprofileid;
                 console.log(`Created profile for ${colleague.name} with ID: ${profileId}`);
+
                 if (profileId) {
                     profilesCreated++;
 
@@ -71,28 +74,28 @@ export function SeedColleagues() {
                     for (const skillName of skillNames) {
                         const skillGuid = skillMap[skillName];
 
+                        // It will safely skip any skills that weren't successfully seeded earlier
                         if (skillGuid) {
                             setStatus(`Linking ${skillName} to ${colleague.name}...`);
 
-                            const levelLetter = colleague.matrix[skillName as keyof typeof colleague.matrix];
-                            const proficiencyInt = PROFICIENCY_MAP[levelLetter];
+                            const levelString = colleague.matrix[skillName as keyof typeof colleague.matrix];
+                            const proficiencyInt = PROFICIENCY_MAP[levelString as string];
                             const isFavorite = colleague.fav === skillName;
 
                             // 4. Create the junction record
                             await Wtw_skillassessmentsService.create({
-                                // HERE IS THE FIX: Automatically generating the required Primary Name Text
                                 wtw_skillassessment1: `${colleague.name} - ${skillName}`,
-
                                 wtw_proficiency: proficiencyInt,
                                 wtw_isfavorite: isFavorite,
 
                                 // Binding the Lookups via OData Navigation Properties
-                                // Double check your Dataverse plural table names!
                                 "wtw_Colleague@odata.bind": `/wtw_colleagueprofiles(${profileId})`,
                                 "wtw_Skill@odata.bind": `/wtw_skilllibraries(${skillGuid})`
                             } as any);
 
                             assessmentsCreated++;
+                        } else {
+                            console.warn(`Could not find skill "${skillName}" in Dataverse library. Skipping.`);
                         }
                     }
                 }

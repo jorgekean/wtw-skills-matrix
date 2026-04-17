@@ -11,4 +11,4 @@ export const SKILLS_DATA: Record<Category, string[]> = {
 
 export const CATEGORIES: Category[] = ['BC', 'Internal', 'Tech', 'Soft'];
 
-export const PROFICIENCY_LEVELS: ProficiencyLevel[] = ['N/A', 'I', 'L', 'U', 'O'];
+export const PROFICIENCY_LEVELS: ProficiencyLevel[] = ['N/A', 'Potential', 'Exposure', 'Experience', 'Expert', 'Consulting'];

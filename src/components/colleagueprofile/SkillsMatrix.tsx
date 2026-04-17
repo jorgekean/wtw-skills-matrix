@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom'; // NEW: Added useNavigate
-import { type ProficiencyLevel } from '../../types/skills';
+import { useParams, useNavigate } from 'react-router-dom';
+import { type ProficiencyLevel } from '../../types/skills'; // Ensure you update this type in your types file!
 import { SkillCard } from './SkillCard';
 
 // --- Import the Generated Dataverse Services ---
@@ -9,28 +9,30 @@ import { Wtw_colleagueprofilesService } from '../../generated/services/Wtw_colle
 import { Wtw_skillassessmentsService } from '../../generated/services/Wtw_skillassessmentsService';
 import { useTheme } from '../../hooks/useTheme';
 
-// Translators for Dataverse Choice Columns
+// UPDATED: Translators for Dataverse Choice Columns
+// IMPORTANT: You MUST verify these integer values match your new Dataverse Choice column values!
 const INT_TO_LEVEL: Record<number, ProficiencyLevel> = {
     894790000: 'N/A',
-    894790001: 'I',
-    894790002: 'L',
-    894790003: 'U',
-    894790004: 'O'
+    894790001: 'Potential',
+    894790002: 'Exposure',
+    894790003: 'Experience',
+    894790004: 'Expert',
+    894790005: 'Consulting' // Added the 6th option
 };
 
 const LEVEL_TO_INT: Record<ProficiencyLevel, number> = {
     'N/A': 894790000,
-    'I': 894790001,
-    'L': 894790002,
-    'U': 894790003,
-    'O': 894790004
+    'Potential': 894790001,
+    'Exposure': 894790002,
+    'Experience': 894790003,
+    'Expert': 894790004,
+    'Consulting': 894790005 // Added the 6th option
 };
 
 // OPTIMIZATION: Stable memory reference prevents unrated cards from constantly re-rendering
 const DEFAULT_SKILL_STATE = { rating: null, interested: false, updatedOn: null };
 
 export const SkillsMatrix: React.FC = () => {
-    // NEW: Navigation hook added
     const navigate = useNavigate();
     const { slug } = useParams<{ slug: string }>();
 
@@ -100,7 +102,7 @@ export const SkillsMatrix: React.FC = () => {
                 setCategories(categoriesArray);
                 if (categoriesArray.length > 0) setActiveCategory(categoriesArray[0]);
 
-                // 2. Find Current User Profile Dynamically using the URL Slug!
+                // 2. Find Current User Profile Dynamically using the URL Slug
                 if (Array.isArray(profiles)) {
                     const activeUser = profiles.find((p: any) => {
                         const name = p.wtw_colleaguename || p.wtw_name || '';
@@ -127,7 +129,7 @@ export const SkillsMatrix: React.FC = () => {
                                 assessmentMap.current[skillName] = a.wtw_skillassessmentid;
 
                                 loadedSkillsState[skillName] = {
-                                    rating: INT_TO_LEVEL[a.wtw_proficiency] || 'N/A',
+                                    rating: INT_TO_LEVEL[a.wtw_proficiency] || 'N/A', // Defaults safely to N/A
                                     interested: a.wtw_isfavorite || false,
                                     updatedOn: a.modifiedon || new Date().toISOString()
                                 };
@@ -203,6 +205,7 @@ export const SkillsMatrix: React.FC = () => {
 
                 if (!skillId) continue;
 
+                // Lookup int value or default to N/A int value
                 const proficiencyInt = details.rating ? LEVEL_TO_INT[details.rating as ProficiencyLevel] : 894790000;
 
                 if (existingAssessmentId) {
@@ -270,10 +273,8 @@ export const SkillsMatrix: React.FC = () => {
                 <div className="max-w-[1920px] mx-auto px-6 py-5 flex justify-between items-center relative z-10">
 
                     <div className="flex items-center gap-4 sm:gap-5">
-
-                        {/* NEW: Modern "Go to List" Back Button */}
                         <button
-                            onClick={() => navigate('/')} // <-- Adjust to match your exact directory route if it's not '/'
+                            onClick={() => navigate('/')}
                             className="group flex items-center justify-center w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 transition-all shadow-sm backdrop-blur-sm transform-gpu active:scale-95"
                             title="Return to Colleague List"
                         >
@@ -338,12 +339,14 @@ export const SkillsMatrix: React.FC = () => {
                     <div className="bg-slate-50/80 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-700 px-6 py-3 flex flex-wrap gap-4 justify-between items-center">
                         <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Proficiency Guide</span>
                         <div className="flex flex-wrap gap-4 lg:gap-6">
+                            {/* UPDATED: Legend accurately reflects the 6 new choices and applies updated styling */}
                             {[
-                                { label: 'N/A: Training', color: 'bg-slate-400' },
-                                { label: 'I: Trained', color: 'bg-indigo-400' },
-                                { label: 'L: Experienced', color: 'bg-emerald-500' },
-                                { label: 'U: Proficient', color: 'bg-[#622F88]' },
-                                { label: 'O: Expert', color: 'bg-slate-900 dark:bg-slate-100' }
+                                { label: 'N/A', color: 'bg-slate-400' },
+                                { label: 'Potential', color: 'bg-sky-400' },
+                                { label: 'Exposure', color: 'bg-indigo-400' },
+                                { label: 'Experience', color: 'bg-emerald-500' },
+                                { label: 'Expert', color: 'bg-[#622F88]' },
+                                { label: 'Consulting', color: 'bg-slate-900 dark:bg-slate-100' }
                             ].map(guide => (
                                 <div key={guide.label} className="flex items-center gap-2">
                                     <span className={`w-3 h-3 rounded-full shadow-sm ${guide.color}`}></span>
