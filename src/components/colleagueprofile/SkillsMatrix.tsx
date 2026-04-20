@@ -54,15 +54,16 @@ export const SkillsMatrix: React.FC = () => {
             try {
                 setIsLoading(true);
 
-                const [skillsRes, profilesRes, assessmentsRes] = await Promise.all([
+                const [skillsRes, profilesRes] = await Promise.all([
                     Wtw_skilllibrariesService.getAll(),
                     Wtw_colleagueprofilesService.getAll(),
-                    Wtw_skillassessmentsService.getAll()
+                    // Wtw_skillassessmentsService.getAll()
                 ]);
 
                 const skills = skillsRes.data || skillsRes;
                 const profiles = profilesRes.data || profilesRes;
-                const assessments = assessmentsRes.data || assessmentsRes;
+                // const assessments = assessmentsRes.data || assessmentsRes;
+                // console.log("Fetched Skills:", skills, assessments);
 
                 // 1. Structure the Skill Library & Build the GUID Map (UPDATED FOR SUBCATEGORIES)
                 const groupedData: Record<string, Record<string, string[]>> = {};
@@ -117,9 +118,16 @@ export const SkillsMatrix: React.FC = () => {
                         setCurrentUserProfile(activeUser);
                         const profileId = activeUser.wtw_colleagueprofileid;
 
-                        const userAssessments = Array.isArray(assessments)
-                            ? assessments.filter((a: any) => a._wtw_colleague_value === profileId || a._wtw_colleagueprofile_value === profileId)
-                            : [];
+                        // ✅ Passing the IGetAllOptions object
+                        const assessmentsResult = await Wtw_skillassessmentsService.getAll({
+                            filter: `_wtw_colleague_value eq ${profileId}`
+                        });
+
+                        const userAssessments = assessmentsResult.data || assessmentsResult;
+                        console.log("Fetched Assessments for User:", userAssessments);
+                        // const userAssessments = Array.isArray(assessments)
+                        //     ? assessments.filter((a: any) => a._wtw_colleague_value === profileId || a._wtw_colleagueprofile_value === profileId)
+                        //     : [];
 
                         const loadedSkillsState: Record<string, any> = {};
 
