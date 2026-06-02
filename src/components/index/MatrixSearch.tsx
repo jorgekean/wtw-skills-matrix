@@ -25,107 +25,213 @@ interface Colleague {
 const LEVEL_WEIGHTS: Record<ProficiencyLevel, number> = { 'N/A': 1, 'Potential': 2, 'Exposure': 3, 'Experience': 4, 'Expert': 5, 'Consulting': 6 };
 const LEVEL_LABELS = ['Any', 'N/A', 'Potential', 'Exposure', 'Experience', 'Expert', 'Consulting'];
 
-// --- HEAT MAP CONFIG & COMPONENT ---
-const HEAT_MAP_COLORS: Record<string, string> = {
-    // Neutral Gray - Has not started learning
-    'N/A': 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700',
-
-    // Red - High priority for training/attention
-    'Potential': 'bg-red-500 dark:bg-red-600/90 border-red-600 dark:border-red-500',
-
-    // Orange - Getting there, needs more exposure
-    'Exposure': 'bg-orange-400 dark:bg-orange-500/90 border-orange-500 dark:border-orange-400',
-
-    // Yellow/Amber - Solid baseline experience
-    'Experience': 'bg-amber-400 dark:bg-amber-500/90 border-amber-500 dark:border-amber-400',
-
-    // Light Green - Highly proficient
-    'Expert': 'bg-emerald-400 dark:bg-emerald-500/90 border-emerald-500 dark:border-emerald-400',
-
-    // Dark Green - Can teach others / Architect level
-    'Consulting': 'bg-green-700 dark:bg-green-600 border-green-800 dark:border-green-500'
-};
-
+// --- TEAM CATEGORY RADAR ---
 const TeamHeatMap = ({ colleagues, skillsMap }: { colleagues: Colleague[], skillsMap: Record<string, string[]> }) => {
-    // UPDATED: Now using your single source of truth for subcategory ordering
     const sortedCategories = sortSubcategories(Object.keys(skillsMap));
+    const isGranularMode = sortedCategories.length <= 2;
 
-    // Flatten skills for the body columns
-    const flatSkills = sortedCategories.flatMap(cat => skillsMap[cat]);
+    const radarDimensions = useMemo(() => {
+        const minimumStrongLevel = LEVEL_WEIGHTS['Experience'];
 
-    if (flatSkills.length === 0 || colleagues.length === 0) {
-        return <div className="p-8 text-center text-slate-400 font-bold bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">No data available to generate map.</div>;
+        const summarizeDimension = (label: string, skills: string[], parentCategory?: string) => {
+            if (skills.length === 0) {
+                return null;
+            }
+
+            let totalScore = 0;
+            let totalItems = 0;
+            let strongCoverageCount = 0;
+
+            colleagues.forEach((colleague) => {
+                skills.forEach((skill) => {
+                    const level = colleague.matrix[skill] || 'N/A';
+                    const levelWeight = LEVEL_WEIGHTS[level];
+                    totalScore += levelWeight;
+                    totalItems += 1;
+                    if (levelWeight >= minimumStrongLevel) {
+                        strongCoverageCount += 1;
+                    }
+                });
+            });
+
+            const avgWeight = totalItems > 0 ? totalScore / totalItems : 1;
+            const normalizedPct = ((avgWeight - 1) / 5) * 100;
+            const strongCoveragePct = totalItems > 0 ? (strongCoverageCount / totalItems) * 100 : 0;
+
+            return {
+                key: parentCategory ? `${parentCategory}::${label}` : label,
+                label,
+                parentCategory,
+                skillsCount: skills.length,
+                avgWeight,
+                scorePct: Math.max(0, Math.min(100, normalizedPct)),
+                strongCoveragePct: Math.max(0, Math.min(100, strongCoveragePct))
+            };
+        };
+
+        if (isGranularMode) {
+            return sortedCategories
+                .flatMap((category) => {
+                    const skills = skillsMap[category] || [];
+                    return skills.map((skill) => summarizeDimension(skill, [skill], category));
+                })
+                .filter((item): item is NonNullable<typeof item> => item !== null);
+        }
+
+        return sortedCategories
+            .map((category) => {
+                const skills = skillsMap[category] || [];
+                return summarizeDimension(category, skills);
+            })
+            .filter((item): item is NonNullable<typeof item> => item !== null);
+    }, [colleagues, isGranularMode, skillsMap, sortedCategories]);
+
+    const weakestDimensions = [...radarDimensions]
+        .sort((a, b) => a.scorePct - b.scorePct)
+        .slice(0, 4);
+
+    if (radarDimensions.length === 0 || colleagues.length === 0) {
+        return <div className="p-8 text-center text-slate-400 font-bold bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">No data available to generate team category radar.</div>;
     }
 
+    const plotSize = 520;
+    const chartPadding = 130;
+    const size = plotSize + (chartPadding * 2);
+    const centerX = chartPadding + (plotSize / 2);
+    const centerY = chartPadding + (plotSize / 2) - 56;
+    const radius = 190;
+    const rings = [20, 40, 60, 80, 100];
+    const angleStep = (Math.PI * 2) / radarDimensions.length;
+
+    const radarPoints = radarDimensions
+        .map((item, index) => {
+            const angle = -Math.PI / 2 + index * angleStep;
+            const r = (item.scorePct / 100) * radius;
+            const x = centerX + Math.cos(angle) * r;
+            const y = centerY + Math.sin(angle) * r;
+            return `${x},${y}`;
+        })
+        .join(' ');
+
     return (
-        <div className="overflow-auto max-h-[70vh] rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm relative">
-            <table className="w-full border-collapse text-left">
-                <thead className="sticky top-0 z-20 shadow-sm">
-                    {/* TIER 1: SUBCATEGORY GROUPING HEADERS */}
-                    <tr className="bg-slate-50/95 dark:bg-slate-800/95 backdrop-blur-md">
-                        {/* Colleague Header (Spans both rows) */}
-                        <th rowSpan={2} className="p-4 sticky left-0 top-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md z-30 border-b border-r border-slate-200 dark:border-slate-700 w-48 min-w-[12rem] align-bottom pb-4">
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Colleague</span>
-                        </th>
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm p-5 sm:p-6">
+            <div className="flex flex-col lg:flex-row gap-8">
+                <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">{isGranularMode ? 'Team Capability Detail' : 'Team Capability By Category'}</h3>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{isGranularMode ? 'Showing skill-level detail because only 1-2 categories are selected.' : 'Average team proficiency normalized from N/A (0%) to Consulting (100%).'}</p>
 
-                        {sortedCategories.map(cat => (
-                            <th
-                                key={cat}
-                                colSpan={skillsMap[cat].length}
-                                className="p-1.5 border-b border-r last:border-r-0 border-slate-200 dark:border-slate-700 text-center bg-slate-100 dark:bg-slate-800/80 shadow-inner"
-                            >
-                                <span className="text-[9px] font-black text-[#622F88] dark:text-purple-400 uppercase tracking-widest truncate block px-2">
-                                    {cat}
-                                </span>
-                            </th>
-                        ))}
-                    </tr>
+                    <p className="mt-2 text-[10px] font-semibold text-slate-600 dark:text-slate-300 text-left">
+                        <span className="font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 mr-2">Legend</span>
+                        Avg = team proficiency from 0% (N/A) to 100% (Consulting). Strong = % of ratings at Experience, Expert, or Consulting.
+                    </p>
 
-                    {/* TIER 2: VERTICAL SKILL NAMES */}
-                    <tr className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md">
-                        {flatSkills.map(skill => (
-                            <th key={skill} className="p-2 border-b border-r last:border-r-0 border-slate-200 dark:border-slate-700 w-10 align-bottom">
-                                <div className="writing-vertical-rl text-[10px] font-bold text-slate-700 dark:text-slate-300 max-h-32 overflow-hidden text-ellipsis whitespace-nowrap mx-auto pb-2">
-                                    {skill}
-                                </div>
-                            </th>
-                        ))}
-                    </tr>
-                </thead>
-
-                <tbody>
-                    {colleagues.map(c => (
-                        <tr key={c.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
-                            {/* Sticky Left Column (Names) */}
-                            <td className="p-3 sticky left-0 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50 z-10 border-r border-b border-slate-100 dark:border-slate-800 transition-colors">
-                                <div className="font-bold text-xs text-slate-800 dark:text-slate-100 truncate" title={c.name}>{c.name}</div>
-                                <div className="text-[9px] text-[#622F88] dark:text-purple-400 font-black uppercase tracking-widest truncate">{c.role}</div>
-                            </td>
-
-                            {/* Heat Map Cells */}
-                            {flatSkills.map(skill => {
-                                const level = c.matrix[skill] || 'N/A';
-                                const colorClass = HEAT_MAP_COLORS[level];
-
+                    <div className="mt-1 w-full flex justify-center">
+                        <svg viewBox={`0 0 ${size} ${size}`} className="w-full max-w-[700px] h-auto" role="img" aria-label="Team category radar chart">
+                            {rings.map((ring) => {
+                                const ringRadius = (ring / 100) * radius;
                                 return (
-                                    <td key={`${c.name}-${skill}`} className="p-1 border-b border-r last:border-r-0 border-slate-100 dark:border-slate-800 text-center bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50">
-                                        <div
-                                            className={`w-full h-8 rounded border transition-all hover:scale-110 hover:shadow-md hover:z-10 relative cursor-pointer ${colorClass}`}
-                                            title={`${c.name}\n${skill}: ${level}`}
-                                        >
-                                            {level !== 'N/A' && (
-                                                <span className="text-[8px] font-black text-white/90 uppercase flex items-center justify-center h-full opacity-0 hover:opacity-100 transition-opacity">
-                                                    {level.charAt(0)}
-                                                </span>
-                                            )}
-                                        </div>
-                                    </td>
+                                    <circle
+                                        key={ring}
+                                        cx={centerX}
+                                        cy={centerY}
+                                        r={ringRadius}
+                                        fill="none"
+                                        stroke="currentColor"
+                                        className="text-slate-200 dark:text-slate-700"
+                                        strokeDasharray={ring === 100 ? '0' : '3 3'}
+                                    />
                                 );
                             })}
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
+
+                            {radarDimensions.map((item, index) => {
+                                const angle = -Math.PI / 2 + index * angleStep;
+                                const axisX = centerX + Math.cos(angle) * radius;
+                                const axisY = centerY + Math.sin(angle) * radius;
+                                const labelX = centerX + Math.cos(angle) * (radius + 26);
+                                const labelY = centerY + Math.sin(angle) * (radius + 26);
+                                const textAnchor = Math.abs(Math.cos(angle)) < 0.2 ? 'middle' : Math.cos(angle) > 0 ? 'start' : 'end';
+                                const shortLabel = item.label.length > 22 ? `${item.label.slice(0, 22)}...` : item.label;
+
+                                return (
+                                    <g key={item.key}>
+                                        <line x1={centerX} y1={centerY} x2={axisX} y2={axisY} stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
+                                        <text
+                                            x={labelX}
+                                            y={labelY}
+                                            textAnchor={textAnchor}
+                                            dominantBaseline="middle"
+                                            className="fill-slate-600 dark:fill-slate-300 text-[11px] font-bold"
+                                        >
+                                            <tspan x={labelX} dy="-0.35em">{shortLabel}</tspan>
+                                            <tspan x={labelX} dy="1.15em" className="fill-slate-500 dark:fill-slate-400 text-[10px] font-semibold">{item.scorePct.toFixed(0)}%</tspan>
+                                        </text>
+                                    </g>
+                                );
+                            })}
+
+                            <polygon
+                                points={radarPoints}
+                                fill="rgba(98, 47, 136, 0.24)"
+                                stroke="rgb(98, 47, 136)"
+                                strokeWidth="2.5"
+                            />
+
+                            {radarDimensions.map((item, index) => {
+                                const angle = -Math.PI / 2 + index * angleStep;
+                                const r = (item.scorePct / 100) * radius;
+                                const x = centerX + Math.cos(angle) * r;
+                                const y = centerY + Math.sin(angle) * r;
+
+                                return (
+                                    <circle
+                                        key={`point-${item.key}`}
+                                        cx={x}
+                                        cy={y}
+                                        r={5}
+                                        fill="rgb(98, 47, 136)"
+                                        stroke="white"
+                                        strokeWidth="2"
+                                    >
+                                        <title>{`${item.label}${item.parentCategory ? ` (${item.parentCategory})` : ''}: ${item.scorePct.toFixed(1)}% avg, ${item.strongCoveragePct.toFixed(1)}% strong coverage`}</title>
+                                    </circle>
+                                );
+                            })}
+                        </svg>
+                    </div>
+                </div>
+
+                <div className="w-full lg:w-80 shrink-0">
+                    <h4 className="text-sm font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">{isGranularMode ? 'Top Skill Gaps' : 'Top Team Gaps'}</h4>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{isGranularMode ? 'Lowest average skills first.' : 'Lowest average categories first.'}</p>
+
+                    <div className="mt-4 space-y-3">
+                        {weakestDimensions.map((item, idx) => (
+                            <div key={item.key} className="rounded-xl border border-slate-200 dark:border-slate-700 p-3.5 bg-slate-50/60 dark:bg-slate-800/40">
+                                <div className="flex items-center justify-between gap-3">
+                                    <div className="min-w-0">
+                                        <p className="text-xs font-black uppercase tracking-widest text-[#622F88] dark:text-purple-300">#{idx + 1} {item.label}</p>
+                                        {item.parentCategory && (
+                                            <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{item.parentCategory}</p>
+                                        )}
+                                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{item.skillsCount} components</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-sm font-black text-slate-800 dark:text-slate-100">{item.scorePct.toFixed(1)}%</p>
+                                        <p className="text-[10px] text-slate-500 dark:text-slate-400">avg capability</p>
+                                    </div>
+                                </div>
+
+                                <div className="mt-3">
+                                    <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                                        <div className="h-full rounded-full bg-[#622F88]" style={{ width: `${item.scorePct}%` }}></div>
+                                    </div>
+                                    <p className="mt-2 text-[10px] font-semibold text-slate-500 dark:text-slate-400">Strong coverage (Experience+): {item.strongCoveragePct.toFixed(1)}%</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
         </div>
     );
 };
