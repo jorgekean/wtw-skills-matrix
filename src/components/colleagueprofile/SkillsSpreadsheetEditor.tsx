@@ -26,7 +26,7 @@ export const SkillsSpreadsheetEditor: React.FC<SkillsSpreadsheetEditorProps> = (
     onBulkUpdate
 }) => {
     const sortedSubcategories = useMemo(
-        () => Object.keys(activeSubcategories).sort((a, b) => (a === 'General' ? -1 : b === 'General' ? 1 : a.localeCompare(b))),
+        () => Object.keys(activeSubcategories),
         [activeSubcategories]
     );
 

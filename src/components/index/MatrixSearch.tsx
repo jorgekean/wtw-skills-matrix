@@ -27,6 +27,53 @@ const LEVEL_TO_INT: Record<ProficiencyLevel, number> = {
     'Consulting': 894790005
 };
 
+type OrderedSkill = {
+    name: string;
+    sortOrder?: number;
+};
+
+const compareOrderedSkills = (a: OrderedSkill, b: OrderedSkill) => {
+    const aHasOrder = typeof a.sortOrder === 'number';
+    const bHasOrder = typeof b.sortOrder === 'number';
+
+    if (aHasOrder && bHasOrder && a.sortOrder !== b.sortOrder) {
+        return (a.sortOrder as number) - (b.sortOrder as number);
+    }
+
+    if (aHasOrder && !bHasOrder) return -1;
+    if (!aHasOrder && bHasOrder) return 1;
+
+    return a.name.localeCompare(b.name);
+};
+
+const normalizeSortOrder = (value: unknown): number | undefined => {
+    if (value === null || value === undefined || value === '') return undefined;
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? numericValue : undefined;
+};
+
+const compareSubcategoriesByFirstSkillOrder = (
+    a: [string, OrderedSkill[]],
+    b: [string, OrderedSkill[]]
+) => {
+    const aFirst = a[1][0]?.sortOrder;
+    const bFirst = b[1][0]?.sortOrder;
+    const aHasOrder = typeof aFirst === 'number';
+    const bHasOrder = typeof bFirst === 'number';
+
+    if (aHasOrder && bHasOrder && aFirst !== bFirst) {
+        return (aFirst as number) - (bFirst as number);
+    }
+
+    if (aHasOrder && !bHasOrder) return -1;
+    if (!aHasOrder && bHasOrder) return 1;
+
+    if (a[0] === 'General' && b[0] !== 'General') return -1;
+    if (a[0] !== 'General' && b[0] === 'General') return 1;
+
+    return a[0].localeCompare(b[0]);
+};
+
 export const MatrixSearch: React.FC = () => {
     const navigate = useNavigate();
     const { isDark, toggleTheme } = useTheme();
@@ -79,8 +126,8 @@ export const MatrixSearch: React.FC = () => {
 
                 const skillIdToNameMap: Record<string, string> = {};
                 const skillNameToIdMapLocal: Record<string, string> = {};
-                const bcSkillsObj: Record<string, string[]> = {};
-                const internalSkillsObj: Record<string, string[]> = {};
+                const bcSkillsObj: Record<string, OrderedSkill[]> = {};
+                const internalSkillsObj: Record<string, OrderedSkill[]> = {};
 
                 if (Array.isArray(skills)) {
                     skills.forEach((s: any) => {
@@ -88,6 +135,7 @@ export const MatrixSearch: React.FC = () => {
                         const categoryStr = s['wtw_category@OData.Community.Display.V1.FormattedValue'];
                         const categoryInt = s.wtw_category;
                         const subCategory = s.wtw_subcategory || 'General';
+                        const sortOrder = normalizeSortOrder(s.wtw_sortorder);
 
                         const isBC = categoryStr === 'BC Components' || categoryInt === 894790000;
                         const isInternal = categoryStr === 'Internal Initiatives' || categoryInt === 894790001;
@@ -97,19 +145,34 @@ export const MatrixSearch: React.FC = () => {
                             skillNameToIdMapLocal[name] = s.wtw_skilllibraryid;
                             if (isBC) {
                                 if (!bcSkillsObj[subCategory]) bcSkillsObj[subCategory] = [];
-                                bcSkillsObj[subCategory].push(name);
+                                bcSkillsObj[subCategory].push({ name, sortOrder });
                             }
                             if (isInternal) {
                                 if (!internalSkillsObj[subCategory]) internalSkillsObj[subCategory] = [];
-                                internalSkillsObj[subCategory].push(name);
+                                internalSkillsObj[subCategory].push({ name, sortOrder });
                             }
                         }
                     });
                     setSkillNameToIdMap(skillNameToIdMapLocal);
-                    Object.keys(bcSkillsObj).forEach(k => bcSkillsObj[k].sort());
-                    Object.keys(internalSkillsObj).forEach(k => internalSkillsObj[k].sort());
-                    setComponentsData(bcSkillsObj);
-                    setInternalData(internalSkillsObj);
+                    Object.keys(bcSkillsObj).forEach(k => bcSkillsObj[k].sort(compareOrderedSkills));
+                    Object.keys(internalSkillsObj).forEach(k => internalSkillsObj[k].sort(compareOrderedSkills));
+
+                    const bcSkillsForUi: Record<string, string[]> = {};
+                    Object.entries(bcSkillsObj)
+                        .sort(compareSubcategoriesByFirstSkillOrder)
+                        .forEach(([subCategory, orderedSkills]) => {
+                            bcSkillsForUi[subCategory] = orderedSkills.map(skill => skill.name);
+                    });
+
+                    const internalSkillsForUi: Record<string, string[]> = {};
+                    Object.entries(internalSkillsObj)
+                        .sort(compareSubcategoriesByFirstSkillOrder)
+                        .forEach(([subCategory, orderedSkills]) => {
+                            internalSkillsForUi[subCategory] = orderedSkills.map(skill => skill.name);
+                    });
+
+                    setComponentsData(bcSkillsForUi);
+                    setInternalData(internalSkillsForUi);
                 }
 
                 if (Array.isArray(profiles) && Array.isArray(assessments)) {
@@ -420,10 +483,16 @@ export const MatrixSearch: React.FC = () => {
     };
 
     const currentGapAnalysis = getTeamGapAnalysis();
-    const editableSkills = useMemo(
-        () => Array.from(new Set(selectedComponents.length > 0 ? selectedComponents : currentSkillFlatList)),
-        [selectedComponents, currentSkillFlatList]
-    );
+    const editableSkills = useMemo(() => {
+        const orderedAllSkills = Array.from(new Set(currentSkillFlatList));
+
+        if (selectedComponents.length === 0) {
+            return orderedAllSkills;
+        }
+
+        const selectedSet = new Set(selectedComponents);
+        return orderedAllSkills.filter(skill => selectedSet.has(skill));
+    }, [selectedComponents, currentSkillFlatList]);
 
     return (
         <div className="flex flex-col h-screen overflow-hidden bg-slate-50 dark:bg-slate-900 transition-colors duration-200 font-sans">

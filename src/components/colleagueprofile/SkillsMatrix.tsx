@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom';
 import { type ProficiencyLevel } from '../../types/skills';
 import { SkillCard } from './SkillCard';
-import { SkillsSpreadsheetEditor } from './SkillsSpreadsheetEditor';
 
 // --- Import the Generated Dataverse Services ---
 import { Wtw_skilllibrariesService } from '../../generated/services/Wtw_skilllibrariesService';
@@ -30,12 +29,58 @@ const LEVEL_TO_INT: Record<ProficiencyLevel, number> = {
 
 const DEFAULT_SKILL_STATE = { rating: null, interested: false, updatedOn: null };
 
+type OrderedSkill = {
+    name: string;
+    sortOrder?: number;
+};
+
+const compareOrderedSkills = (a: OrderedSkill, b: OrderedSkill) => {
+    const aHasOrder = typeof a.sortOrder === 'number';
+    const bHasOrder = typeof b.sortOrder === 'number';
+
+    if (aHasOrder && bHasOrder && a.sortOrder !== b.sortOrder) {
+        return (a.sortOrder as number) - (b.sortOrder as number);
+    }
+
+    if (aHasOrder && !bHasOrder) return -1;
+    if (!aHasOrder && bHasOrder) return 1;
+
+    return a.name.localeCompare(b.name);
+};
+
+const normalizeSortOrder = (value: unknown): number | undefined => {
+    if (value === null || value === undefined || value === '') return undefined;
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? numericValue : undefined;
+};
+
+const compareSubcategoriesByFirstSkillOrder = (
+    a: [string, OrderedSkill[]],
+    b: [string, OrderedSkill[]]
+) => {
+    const aFirst = a[1][0]?.sortOrder;
+    const bFirst = b[1][0]?.sortOrder;
+    const aHasOrder = typeof aFirst === 'number';
+    const bHasOrder = typeof bFirst === 'number';
+
+    if (aHasOrder && bHasOrder && aFirst !== bFirst) {
+        return (aFirst as number) - (bFirst as number);
+    }
+
+    if (aHasOrder && !bHasOrder) return -1;
+    if (!aHasOrder && bHasOrder) return 1;
+
+    if (a[0] === 'General' && b[0] !== 'General') return -1;
+    if (a[0] !== 'General' && b[0] === 'General') return 1;
+
+    return a[0].localeCompare(b[0]);
+};
+
 export const SkillsMatrix: React.FC = () => {
     const navigate = useNavigate();
     const { slug } = useParams<{ slug: string }>();
 
     const [activeCategory, setActiveCategory] = useState<string>('');
-    const [isSpreadsheetMode, setIsSpreadsheetMode] = useState(false);
     const { isDark, toggleTheme } = useTheme();
     const [isSaving, setIsSaving] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
@@ -68,7 +113,7 @@ export const SkillsMatrix: React.FC = () => {
                 // console.log("Fetched Skills:", skills, assessments);
 
                 // 1. Structure the Skill Library & Build the GUID Map (UPDATED FOR SUBCATEGORIES)
-                const groupedData: Record<string, Record<string, string[]>> = {};
+                const groupedData: Record<string, Record<string, OrderedSkill[]>> = {};
                 const uniqueCategories = new Set<string>();
 
                 if (Array.isArray(skills)) {
@@ -77,6 +122,7 @@ export const SkillsMatrix: React.FC = () => {
                         const subCategoryName = item.wtw_subcategory || 'General'; // Grabs subcategory or defaults
                         const skillName = item.wtw_skillname || item.wtw_name || 'Unknown Skill';
                         const skillId = item.wtw_skilllibraryid;
+                        const sortOrder = normalizeSortOrder(item.wtw_sortorder);
 
                         if (skillName && skillId) {
                             skillMap.current[skillName] = skillId;
@@ -85,15 +131,18 @@ export const SkillsMatrix: React.FC = () => {
                             if (!groupedData[categoryName]) groupedData[categoryName] = {};
                             if (!groupedData[categoryName][subCategoryName]) groupedData[categoryName][subCategoryName] = [];
 
-                            groupedData[categoryName][subCategoryName].push(skillName);
+                            groupedData[categoryName][subCategoryName].push({
+                                name: skillName,
+                                sortOrder
+                            });
                             uniqueCategories.add(categoryName);
                         }
                     });
 
-                    // Sort skills alphabetically inside their subcategories
+                    // Sort skills by custom order first, then by name.
                     Object.keys(groupedData).forEach(cat => {
                         Object.keys(groupedData[cat]).forEach(subCat => {
-                            groupedData[cat][subCat].sort();
+                            groupedData[cat][subCat].sort(compareOrderedSkills);
                         });
                     });
                 }
@@ -105,7 +154,17 @@ export const SkillsMatrix: React.FC = () => {
                     return (indexA === -1 ? 99 : indexA) - (indexB === -1 ? 99 : indexB);
                 });
 
-                setSkillsData(groupedData);
+                const groupedDataForUi: Record<string, Record<string, string[]>> = {};
+                Object.keys(groupedData).forEach(cat => {
+                    groupedDataForUi[cat] = {};
+                    Object.entries(groupedData[cat])
+                        .sort(compareSubcategoriesByFirstSkillOrder)
+                        .forEach(([subCat, orderedSkills]) => {
+                            groupedDataForUi[cat][subCat] = orderedSkills.map(skill => skill.name);
+                    });
+                });
+
+                setSkillsData(groupedDataForUi);
                 setCategories(categoriesArray);
                 if (categoriesArray.length > 0) setActiveCategory(categoriesArray[0]);
 
@@ -386,83 +445,61 @@ export const SkillsMatrix: React.FC = () => {
                                 </div>
                             ))}
                         </div>
-                        <button
-                            type="button"
-                            onClick={() => setIsSpreadsheetMode(prev => !prev)}
-                            className={`ml-auto inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[10px] font-black uppercase tracking-widest transition-colors ${isSpreadsheetMode ? 'bg-[#622F88] text-white border-[#622F88]' : 'bg-white dark:bg-slate-700 text-[#622F88] dark:text-purple-300 border-purple-200 dark:border-slate-600 hover:bg-purple-50 dark:hover:bg-slate-600'}`}
-                        >
-                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM4 10h16M8 6v12" />
-                            </svg>
-                            {isSpreadsheetMode ? 'Card View' : 'Batch Edit'}
-                        </button>
                     </div>
                 </div>
             </section>
 
             <main className="flex-1 overflow-y-auto p-6 lg:p-8 pb-24">
-                {isSpreadsheetMode ? (
-                    <SkillsSpreadsheetEditor
-                        activeCategory={activeCategory}
-                        activeSubcategories={activeSubcategories}
-                        userSkills={userSkills}
-                        onUpdateRating={handleUpdateRating}
-                        onToggleHeart={handleToggleHeart}
-                        onBulkUpdate={handleBulkUpdate}
-                    />
-                ) : (
-                    <div className="max-w-[1920px] mx-auto flex flex-col gap-10">
-                        {Object.entries(activeSubcategories)
-                            .sort(([catA], [catB]) => catA === 'General' ? -1 : catB === 'General' ? 1 : catA.localeCompare(catB))
-                            .map(([subCat, skills]) => (
-                                <div key={subCat} className="flex flex-col gap-5">
+                <div className="max-w-[1920px] mx-auto flex flex-col gap-10">
+                    {Object.entries(activeSubcategories)
+                        .map(([subCat, skills]) => (
+                            <div key={subCat} className="flex flex-col gap-5">
 
-                                    <div className="flex items-center gap-4 group">
-                                        <h2 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest">{subCat}</h2>
-                                        <div className="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
+                                <div className="flex items-center gap-4 group">
+                                    <h2 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest">{subCat}</h2>
+                                    <div className="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
 
-                                        <div className="relative opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-200">
-                                            <select
-                                                className="text-[10px] font-bold text-[#622F88] dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-md py-1.5 pl-3 pr-7 appearance-none focus:outline-none focus:ring-2 focus:ring-purple-300 cursor-pointer shadow-sm"
-                                                defaultValue=""
-                                                onChange={(e) => {
-                                                    if (e.target.value) {
-                                                        handleBulkUpdate(skills, e.target.value as ProficiencyLevel);
-                                                        e.target.value = "";
-                                                    }
-                                                }}
-                                            >
-                                                <option value="" disabled>Bulk Set All...</option>
-                                                <option value="N/A">Set All to N/A</option>
-                                                <option value="Potential">Set All to Potential</option>
-                                                <option value="Exposure">Set All to Exposure</option>
-                                                <option value="Experience">Set All to Experience</option>
-                                                <option value="Expert">Set All to Expert</option>
-                                                <option value="Consulting">Set All to Consulting</option>
-                                            </select>
-                                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[#622F88] dark:text-purple-400">
-                                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
-                                                </svg>
-                                            </div>
+                                    <div className="relative opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-200">
+                                        <select
+                                            className="text-[10px] font-bold text-[#622F88] dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-md py-1.5 pl-3 pr-7 appearance-none focus:outline-none focus:ring-2 focus:ring-purple-300 cursor-pointer shadow-sm"
+                                            defaultValue=""
+                                            onChange={(e) => {
+                                                if (e.target.value) {
+                                                    handleBulkUpdate(skills, e.target.value as ProficiencyLevel);
+                                                    e.target.value = "";
+                                                }
+                                            }}
+                                        >
+                                            <option value="" disabled>Bulk Set All...</option>
+                                            <option value="N/A">Set All to N/A</option>
+                                            <option value="Potential">Set All to Potential</option>
+                                            <option value="Exposure">Set All to Exposure</option>
+                                            <option value="Experience">Set All to Experience</option>
+                                            <option value="Expert">Set All to Expert</option>
+                                            <option value="Consulting">Set All to Consulting</option>
+                                        </select>
+                                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[#622F88] dark:text-purple-400">
+                                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
+                                            </svg>
                                         </div>
                                     </div>
-
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
-                                        {skills.map(skill => (
-                                            <SkillCard
-                                                key={skill}
-                                                skill={skill}
-                                                details={userSkills[skill] || DEFAULT_SKILL_STATE}
-                                                onUpdateRating={handleUpdateRating}
-                                                onToggleHeart={handleToggleHeart}
-                                            />
-                                        ))}
-                                    </div>
                                 </div>
-                            ))}
-                    </div>
-                )}
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
+                                    {skills.map(skill => (
+                                        <SkillCard
+                                            key={skill}
+                                            skill={skill}
+                                            details={userSkills[skill] || DEFAULT_SKILL_STATE}
+                                            onUpdateRating={handleUpdateRating}
+                                            onToggleHeart={handleToggleHeart}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                </div>
 
                 <div className="max-w-[1920px] mx-auto mt-12 bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm transition-colors duration-200">
                     <div className="flex items-center gap-2 mb-4">
