@@ -1,8 +1,24 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { ProficiencyLevel } from '../../types/skills';
 import type { Colleague } from './types';
 
 const LEVELS: ProficiencyLevel[] = ['N/A', 'Potential', 'Exposure', 'Experience', 'Expert', 'Consulting'];
+
+const LEVEL_ALIASES: Record<string, ProficiencyLevel> = {
+    'n/a': 'N/A',
+    'na': 'N/A',
+    'potential': 'Potential',
+    'exposure': 'Exposure',
+    'experience': 'Experience',
+    'expert': 'Expert',
+    'consulting': 'Consulting'
+};
+
+const normalizeLevel = (value: string): ProficiencyLevel | undefined => {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return undefined;
+    return LEVEL_ALIASES[normalized];
+};
 
 export const BatchMatrixEditor: React.FC<{
     colleagues: Colleague[];
@@ -12,6 +28,32 @@ export const BatchMatrixEditor: React.FC<{
     onUpdateCell: (profileId: string, skill: string, level: ProficiencyLevel) => void;
     onSave: () => void;
 }> = ({ colleagues, editableSkills, pendingChanges, isSaving, onUpdateCell, onSave }) => {
+    const [focusedCell, setFocusedCell] = useState<{ rowIndex: number; colIndex: number } | null>(null);
+
+    const handlePaste = (clipboardText: string, startRow: number, startCol: number) => {
+        const rows = clipboardText
+            .replace(/\r\n/g, '\n')
+            .split('\n')
+            .filter((line) => line.trim().length > 0);
+
+        rows.forEach((rowText, rowOffset) => {
+            const values = rowText.split('\t');
+
+            values.forEach((rawValue, colOffset) => {
+                const level = normalizeLevel(rawValue);
+                if (!level) return;
+
+                const targetRow = startRow + rowOffset;
+                const targetCol = startCol + colOffset;
+                const colleague = colleagues[targetRow];
+                const skill = editableSkills[targetCol];
+
+                if (!colleague || !skill) return;
+                onUpdateCell(colleague.profileId, skill, level);
+            });
+        });
+    };
+
     return (
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 flex items-center justify-between gap-3">
@@ -19,6 +61,9 @@ export const BatchMatrixEditor: React.FC<{
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Batch Edit</p>
                     <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
                         Editing {colleagues.length} visible users x {editableSkills.length} skills
+                    </p>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                        Click a cell, then paste from Excel to fill a range.
                     </p>
                 </div>
                 <button
@@ -50,7 +95,7 @@ export const BatchMatrixEditor: React.FC<{
                             </tr>
                         </thead>
                         <tbody>
-                            {colleagues.map((colleague) => (
+                            {colleagues.map((colleague, rowIndex) => (
                                 <tr key={colleague.profileId} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
                                     <td className="sticky left-0 z-10 bg-white dark:bg-slate-800 p-3 border-b border-r border-slate-100 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-slate-100">
                                         {colleague.name}
@@ -58,14 +103,22 @@ export const BatchMatrixEditor: React.FC<{
                                     <td className="sticky left-55 z-10 bg-white dark:bg-slate-800 p-3 border-b border-r border-slate-100 dark:border-slate-700 text-xs font-bold text-[#622F88] dark:text-purple-300 uppercase tracking-widest">
                                         {colleague.role}
                                     </td>
-                                    {editableSkills.map((skill) => {
+                                    {editableSkills.map((skill, colIndex) => {
                                         const current = colleague.matrix[skill] || 'N/A';
+                                        const isFocused = focusedCell?.rowIndex === rowIndex && focusedCell?.colIndex === colIndex;
                                         return (
                                             <td key={`${colleague.profileId}-${skill}`} className="p-2 border-b border-r border-slate-100 dark:border-slate-700">
                                                 <select
                                                     value={current}
                                                     onChange={(e) => onUpdateCell(colleague.profileId, skill, e.target.value as ProficiencyLevel)}
-                                                    className="w-full text-xs font-bold rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-100 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-300"
+                                                    onFocus={() => setFocusedCell({ rowIndex, colIndex })}
+                                                    onPaste={(e) => {
+                                                        const pasteText = e.clipboardData.getData('text');
+                                                        if (!pasteText) return;
+                                                        e.preventDefault();
+                                                        handlePaste(pasteText, rowIndex, colIndex);
+                                                    }}
+                                                    className={`w-full text-xs font-bold rounded-md border bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-100 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-300 ${isFocused ? 'border-[#622F88] dark:border-purple-400' : 'border-slate-200 dark:border-slate-700'}`}
                                                 >
                                                     {LEVELS.map((lvl) => (
                                                         <option key={lvl} value={lvl}>{lvl}</option>
