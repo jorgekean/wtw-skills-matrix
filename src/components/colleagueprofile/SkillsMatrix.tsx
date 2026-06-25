@@ -161,7 +161,7 @@ export const SkillsMatrix: React.FC = () => {
                         .sort(compareSubcategoriesByFirstSkillOrder)
                         .forEach(([subCat, orderedSkills]) => {
                             groupedDataForUi[cat][subCat] = orderedSkills.map(skill => skill.name);
-                    });
+                        });
                 });
 
                 setSkillsData(groupedDataForUi);

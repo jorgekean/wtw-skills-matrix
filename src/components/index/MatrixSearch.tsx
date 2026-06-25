@@ -162,14 +162,14 @@ export const MatrixSearch: React.FC = () => {
                         .sort(compareSubcategoriesByFirstSkillOrder)
                         .forEach(([subCategory, orderedSkills]) => {
                             bcSkillsForUi[subCategory] = orderedSkills.map(skill => skill.name);
-                    });
+                        });
 
                     const internalSkillsForUi: Record<string, string[]> = {};
                     Object.entries(internalSkillsObj)
                         .sort(compareSubcategoriesByFirstSkillOrder)
                         .forEach(([subCategory, orderedSkills]) => {
                             internalSkillsForUi[subCategory] = orderedSkills.map(skill => skill.name);
-                    });
+                        });
 
                     setComponentsData(bcSkillsForUi);
                     setInternalData(internalSkillsForUi);
