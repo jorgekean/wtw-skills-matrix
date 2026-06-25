@@ -11,9 +11,13 @@ export interface RadarDimension {
     label: string;
     parentCategory?: string;
     skillsCount: number;
+    totalColleagues: number;
     avgWeight: number;
     scorePct: number;
     strongCoveragePct: number;
+    needsSupportCount: number;
+    independentCount: number;
+    mentorReadyCount: number;
 }
 
 export interface RadarMetricsResult {

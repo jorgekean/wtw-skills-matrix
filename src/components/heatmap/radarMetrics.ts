@@ -12,6 +12,9 @@ const LEVEL_WEIGHTS: Record<ProficiencyLevel, number> = {
 };
 
 const MINIMUM_STRONG_LEVEL = LEVEL_WEIGHTS['Experience'];
+const MAX_SUPPORT_LEVEL = LEVEL_WEIGHTS['Exposure'];
+const INDEPENDENT_LEVEL = LEVEL_WEIGHTS['Experience'];
+const MIN_MENTOR_LEVEL = LEVEL_WEIGHTS['Expert'];
 
 const clampPercent = (value: number): number => Math.max(0, Math.min(100, value));
 
@@ -28,19 +31,36 @@ const summarizeDimension = (
     let totalScore = 0;
     let totalItems = 0;
     let strongCoverageCount = 0;
+    let needsSupportCount = 0;
+    let independentCount = 0;
+    let mentorReadyCount = 0;
 
     colleagues.forEach((colleague) => {
+        let colleagueScore = 0;
+
         skills.forEach((skill) => {
             const level = colleague.matrix[skill] || 'N/A';
             const levelWeight = LEVEL_WEIGHTS[level];
 
             totalScore += levelWeight;
             totalItems += 1;
+            colleagueScore += levelWeight;
 
             if (levelWeight >= MINIMUM_STRONG_LEVEL) {
                 strongCoverageCount += 1;
             }
         });
+
+        const colleagueAvgWeight = skills.length > 0 ? colleagueScore / skills.length : 1;
+        const roundedColleagueLevel = Math.round(colleagueAvgWeight);
+
+        if (roundedColleagueLevel <= MAX_SUPPORT_LEVEL) {
+            needsSupportCount += 1;
+        } else if (roundedColleagueLevel === INDEPENDENT_LEVEL) {
+            independentCount += 1;
+        } else if (roundedColleagueLevel >= MIN_MENTOR_LEVEL) {
+            mentorReadyCount += 1;
+        }
     });
 
     const avgWeight = totalItems > 0 ? totalScore / totalItems : 1;
@@ -52,9 +72,13 @@ const summarizeDimension = (
         label,
         parentCategory,
         skillsCount: skills.length,
+        totalColleagues: colleagues.length,
         avgWeight,
         scorePct: clampPercent(normalizedPct),
-        strongCoveragePct: clampPercent(strongCoveragePct)
+        strongCoveragePct: clampPercent(strongCoveragePct),
+        needsSupportCount,
+        independentCount,
+        mentorReadyCount
     };
 };
 

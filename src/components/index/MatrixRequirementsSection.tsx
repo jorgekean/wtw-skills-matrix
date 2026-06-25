@@ -105,7 +105,7 @@ export const MatrixRequirementsSection = ({
                             </button>
                             <button type="button" onClick={() => onViewModeChange('HEATMAP')} className={`flex items-center justify-center px-3 text-xs font-bold rounded-lg transition-all ${viewMode === 'HEATMAP' ? 'bg-white dark:bg-slate-800 text-[#622F88] dark:text-purple-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>
                                 <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
-                                Grid
+                                Heat Map
                             </button>
                         </div>
                     </div>
