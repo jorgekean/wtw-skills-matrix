@@ -27,7 +27,7 @@ export class Wtw_skilllibrariesService {
   public static async update(id: string, changedFields: Partial<Omit<Wtw_skilllibrariesBase, 'wtw_skilllibraryid'>>): Promise<IOperationResult<Wtw_skilllibraries>> {
     const result = await Wtw_skilllibrariesService.client.updateRecordAsync<Partial<Omit<Wtw_skilllibrariesBase, 'wtw_skilllibraryid'>>, Wtw_skilllibraries>(
       Wtw_skilllibrariesService.dataSourceName,
-      id.toString(),
+      id,
       changedFields
     );
     return result;
@@ -36,13 +36,13 @@ export class Wtw_skilllibrariesService {
   public static async delete(id: string): Promise<void> {
     await Wtw_skilllibrariesService.client.deleteRecordAsync(
       Wtw_skilllibrariesService.dataSourceName,
-      id.toString());
+      id);
   }
 
   public static async get(id: string, options?: IGetOptions): Promise<IOperationResult<Wtw_skilllibraries>> {
     const result = await Wtw_skilllibrariesService.client.retrieveRecordAsync<Wtw_skilllibraries>(
       Wtw_skilllibrariesService.dataSourceName,
-      id.toString(),
+      id,
       options
     );
     return result;

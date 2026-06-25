@@ -21,17 +21,19 @@ export const Wtw_skilllibrarieswtw_category = {
 export type Wtw_skilllibrarieswtw_category = keyof typeof Wtw_skilllibrarieswtw_category;
 
 export interface Wtw_skilllibrariesBase {
-  importsequencenumber?: string;
+  importsequencenumber?: number;
   overriddencreatedon?: string;
   ownerid: string;
   owneridtype: string;
   statecode: Wtw_skilllibrariesstatecode;
   statuscode?: Wtw_skilllibrariesstatuscode;
-  timezoneruleversionnumber?: string;
-  utcconversiontimezonecode?: string;
+  timezoneruleversionnumber?: number;
+  utcconversiontimezonecode?: number;
   wtw_category?: Wtw_skilllibrarieswtw_category;
   wtw_skilllibraryid: string;
   wtw_skillname: string;
+  wtw_sortorder?: number;
+  wtw_subcategory?: string;
 }
 
 export interface Wtw_skilllibraries extends Wtw_skilllibrariesBase {
@@ -50,7 +52,7 @@ export interface Wtw_skilllibraries extends Wtw_skilllibrariesBase {
   owningbusinessunitname: string;
   statecodename?: string;
   statuscodename?: string;
-  versionnumber?: string;
+  versionnumber?: number;
   wtw_categoryname?: string;
   createdby?: object;
   _createdby_value?: string;

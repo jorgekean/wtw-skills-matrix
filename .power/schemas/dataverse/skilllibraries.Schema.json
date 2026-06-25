@@ -359,6 +359,21 @@
           "x-ms-dataverse-primary-name": true,
           "required": true,
           "maxLength": 850
+        },
+        "wtw_sortorder": {
+          "type": "string",
+          "title": "SortOrder",
+          "x-ms-dataverse-attribute": "wtw_sortorder",
+          "x-ms-dataverse-type": "IntegerType",
+          "x-ms-schema-name": "wtw_SortOrder"
+        },
+        "wtw_subcategory": {
+          "type": "string",
+          "title": "Sub Category",
+          "x-ms-dataverse-attribute": "wtw_subcategory",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "wtw_SubCategory",
+          "maxLength": 100
         }
       },
       "required": [

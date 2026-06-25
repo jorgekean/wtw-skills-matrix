@@ -12,11 +12,20 @@ import { MatrixRequirementsSection } from './MatrixRequirementsSection';
 import { MatrixLoadingOverlay } from './MatrixLoadingOverlay';
 import { TeamBuilderSidebar } from './TeamBuilderSidebar';
 import { GapAnalysisModal } from './GapAnalysisModal';
+import { BatchMatrixEditor } from './BatchMatrixEditor';
 import type { MatrixView, Colleague, TeamGapAnalysisItem } from './types';
 
 // Weights for Scoring (N/A = 1, Consulting = 6)
 const LEVEL_WEIGHTS: Record<ProficiencyLevel, number> = { 'N/A': 1, 'Potential': 2, 'Exposure': 3, 'Experience': 4, 'Expert': 5, 'Consulting': 6 };
 const LEVEL_LABELS = ['Any', 'N/A', 'Potential', 'Exposure', 'Experience', 'Expert', 'Consulting'];
+const LEVEL_TO_INT: Record<ProficiencyLevel, number> = {
+    'N/A': 894790000,
+    'Potential': 894790001,
+    'Exposure': 894790002,
+    'Experience': 894790003,
+    'Expert': 894790004,
+    'Consulting': 894790005
+};
 
 export const MatrixSearch: React.FC = () => {
     const navigate = useNavigate();
@@ -41,6 +50,12 @@ export const MatrixSearch: React.FC = () => {
     const [showAnalysis, setShowAnalysis] = useState(false);
     const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
     const [viewMode, setViewMode] = useState<'TABLE' | 'HEATMAP'>('TABLE'); // NEW VIEW TOGGLE
+    const [isBatchEditMode, setIsBatchEditMode] = useState(false);
+    const [isSavingBatchChanges, setIsSavingBatchChanges] = useState(false);
+
+    const [pendingBatchChanges, setPendingBatchChanges] = useState<Record<string, ProficiencyLevel>>({});
+
+    const [skillNameToIdMap, setSkillNameToIdMap] = useState<Record<string, string>>({});
 
     const uniqueRoles = useMemo(() => Array.from(new Set(colleaguesData.map(c => c.role))).filter(Boolean).sort(), [colleaguesData]);
     const currentSkillMap = activeView === 'BC' ? componentsData : internalData;
@@ -63,6 +78,7 @@ export const MatrixSearch: React.FC = () => {
                 const assessments = assessmentsRes.data || assessmentsRes;
 
                 const skillIdToNameMap: Record<string, string> = {};
+                const skillNameToIdMapLocal: Record<string, string> = {};
                 const bcSkillsObj: Record<string, string[]> = {};
                 const internalSkillsObj: Record<string, string[]> = {};
 
@@ -78,6 +94,7 @@ export const MatrixSearch: React.FC = () => {
 
                         if (name) {
                             skillIdToNameMap[s.wtw_skilllibraryid] = name;
+                            skillNameToIdMapLocal[name] = s.wtw_skilllibraryid;
                             if (isBC) {
                                 if (!bcSkillsObj[subCategory]) bcSkillsObj[subCategory] = [];
                                 bcSkillsObj[subCategory].push(name);
@@ -88,6 +105,7 @@ export const MatrixSearch: React.FC = () => {
                             }
                         }
                     });
+                    setSkillNameToIdMap(skillNameToIdMapLocal);
                     Object.keys(bcSkillsObj).forEach(k => bcSkillsObj[k].sort());
                     Object.keys(internalSkillsObj).forEach(k => internalSkillsObj[k].sort());
                     setComponentsData(bcSkillsObj);
@@ -114,6 +132,7 @@ export const MatrixSearch: React.FC = () => {
                     const formattedColleagues: Colleague[] = profiles.map((p: any) => {
                         const profileId = p.wtw_colleagueprofileid;
                         const matrix: Record<string, ProficiencyLevel> = {};
+                        const assessmentIds: Record<string, string> = {};
                         let favSkill = '';
 
                         // Direct O(1) lookup instead of a slow array filter
@@ -126,14 +145,17 @@ export const MatrixSearch: React.FC = () => {
 
                             if (skillName && levelInt) {
                                 matrix[skillName] = INT_TO_LEVEL[levelInt] || 'N/A';
+                                assessmentIds[skillName] = a.wtw_skillassessmentid;
                                 if (a.wtw_isfavorite) favSkill = skillName;
                             }
                         });
 
                         return {
+                            profileId,
                             name: p.wtw_colleaguename || p.wtw_name || 'Unknown',
                             role: p.wtw_jobrole || 'Unassigned',
                             matrix: matrix,
+                            assessmentIds,
                             fav: favSkill,
                             tech: []
                         };
@@ -159,6 +181,7 @@ export const MatrixSearch: React.FC = () => {
         setSelectedComponents([]);
         setMinLevel(0);
         setExpandedRows(new Set());
+        setPendingBatchChanges({});
     };
 
     const toggleComponent = (comp: string) => setSelectedComponents(prev => prev.includes(comp) ? prev.filter(c => c !== comp) : [...prev, comp]);
@@ -180,6 +203,113 @@ export const MatrixSearch: React.FC = () => {
         setSelectedRole('all');
         setTeam([]);
         setExpandedRows(new Set());
+        setPendingBatchChanges({});
+    };
+
+    const handleBatchCellUpdate = (profileId: string, skill: string, level: ProficiencyLevel) => {
+        setColleaguesData(prev => prev.map(c => {
+            if (c.profileId !== profileId) return c;
+            return {
+                ...c,
+                matrix: {
+                    ...c.matrix,
+                    [skill]: level
+                }
+            };
+        }));
+
+        setPendingBatchChanges(prev => ({
+            ...prev,
+            [`${profileId}::${skill}`]: level
+        }));
+    };
+
+    const saveBatchChanges = async () => {
+        const entries = Object.entries(pendingBatchChanges);
+        if (entries.length === 0) return;
+
+        try {
+            setIsSavingBatchChanges(true);
+            const successfulKeys = new Set<string>();
+            const failedKeys: string[] = [];
+
+            for (const [key, level] of entries) {
+                const [profileId, skillName] = key.split('::');
+                const colleague = colleaguesData.find(c => c.profileId === profileId);
+                const skillId = skillNameToIdMap[skillName];
+
+                if (!colleague || !skillId) continue;
+
+                const existingAssessmentId = colleague.assessmentIds[skillName];
+                const proficiencyInt = LEVEL_TO_INT[level];
+
+                try {
+                    if (existingAssessmentId) {
+                        await Wtw_skillassessmentsService.update(existingAssessmentId, {
+                            wtw_proficiency: proficiencyInt
+                        } as any);
+
+                        const verify = await Wtw_skillassessmentsService.get(existingAssessmentId);
+                        const savedProficiency = (verify.data || verify as any)?.wtw_proficiency;
+                        if (savedProficiency !== proficiencyInt) {
+                            throw new Error(`Verification failed for ${colleague.name} - ${skillName}`);
+                        }
+                    } else {
+                        const created = await Wtw_skillassessmentsService.create({
+                            wtw_skillassessment1: `${colleague.name} - ${skillName}`,
+                            wtw_proficiency: proficiencyInt,
+                            wtw_isfavorite: false,
+                            "wtw_Colleague@odata.bind": `/wtw_colleagueprofiles(${profileId})`,
+                            "wtw_Skill@odata.bind": `/wtw_skilllibraries(${skillId})`
+                        } as any);
+
+                        const newId = created?.data?.wtw_skillassessmentid || (created as any)?.wtw_skillassessmentid;
+                        if (!newId) {
+                            throw new Error(`Create response missing assessment id for ${colleague.name} - ${skillName}`);
+                        }
+
+                        const verify = await Wtw_skillassessmentsService.get(newId);
+                        const savedProficiency = (verify.data || verify as any)?.wtw_proficiency;
+                        if (savedProficiency !== proficiencyInt) {
+                            throw new Error(`Verification failed for ${colleague.name} - ${skillName}`);
+                        }
+
+                        setColleaguesData(prev => prev.map(c => {
+                            if (c.profileId !== profileId) return c;
+                            return {
+                                ...c,
+                                assessmentIds: {
+                                    ...c.assessmentIds,
+                                    [skillName]: newId
+                                }
+                            };
+                        }));
+                    }
+
+                    successfulKeys.add(key);
+                } catch (entryError) {
+                    console.error('Batch save entry failed:', key, entryError);
+                    failedKeys.push(key);
+                }
+            }
+
+            setPendingBatchChanges(prev => {
+                const next = { ...prev };
+                successfulKeys.forEach(k => {
+                    delete next[k];
+                });
+                return next;
+            });
+
+            if (failedKeys.length > 0) {
+                alert(`Saved ${successfulKeys.size} change(s), but ${failedKeys.length} failed verification in Dataverse.`);
+            }
+        } catch (error) {
+            console.error('Failed to save batch changes:', error);
+            alert('Failed to save one or more batch changes. Please check console details.');
+        } finally {
+            setIsSavingBatchChanges(false);
+        }
     };
 
     const toggleTeamMember = (colleague: Colleague) => {
@@ -290,6 +420,10 @@ export const MatrixSearch: React.FC = () => {
     };
 
     const currentGapAnalysis = getTeamGapAnalysis();
+    const editableSkills = useMemo(
+        () => Array.from(new Set(selectedComponents.length > 0 ? selectedComponents : currentSkillFlatList)),
+        [selectedComponents, currentSkillFlatList]
+    );
 
     return (
         <div className="flex flex-col h-screen overflow-hidden bg-slate-50 dark:bg-slate-900 transition-colors duration-200 font-sans">
@@ -311,6 +445,13 @@ export const MatrixSearch: React.FC = () => {
                         </div>
                         <button onClick={toggleTheme} className="bg-white/10 hover:bg-white/20 text-white border border-white/20 p-2 rounded-xl transition-all shadow-sm active:scale-95 flex items-center justify-center">
                             {isDark ? <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg> : <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setIsBatchEditMode(prev => !prev)}
+                            className={`px-3 py-2 rounded-xl text-xs font-black uppercase tracking-widest border transition-all ${isBatchEditMode ? 'bg-white text-[#622F88] border-white' : 'bg-white/10 hover:bg-white/20 text-white border-white/20'}`}
+                        >
+                            {isBatchEditMode ? 'Standard View' : 'Batch Edit'}
                         </button>
                     </div>
                 </div>
@@ -343,7 +484,16 @@ export const MatrixSearch: React.FC = () => {
 
                     {isLoadingData && <MatrixLoadingOverlay />}
 
-                    {viewMode === 'HEATMAP' ? (
+                    {isBatchEditMode ? (
+                        <BatchMatrixEditor
+                            colleagues={processedColleagues}
+                            editableSkills={editableSkills}
+                            pendingChanges={Object.keys(pendingBatchChanges).length}
+                            isSaving={isSavingBatchChanges}
+                            onUpdateCell={handleBatchCellUpdate}
+                            onSave={saveBatchChanges}
+                        />
+                    ) : viewMode === 'HEATMAP' ? (
                         // HEAT MAP VIEW
                         <TeamHeatMap
                             colleagues={processedColleagues}
@@ -502,12 +652,14 @@ export const MatrixSearch: React.FC = () => {
                     )}
                 </div>
 
-                <TeamBuilderSidebar
-                    team={team}
-                    onToggleTeamMember={toggleTeamMember}
-                    onClearTeam={() => setTeam([])}
-                    onAnalyze={() => setShowAnalysis(true)}
-                />
+                {!isBatchEditMode && (
+                    <TeamBuilderSidebar
+                        team={team}
+                        onToggleTeamMember={toggleTeamMember}
+                        onClearTeam={() => setTeam([])}
+                        onAnalyze={() => setShowAnalysis(true)}
+                    />
+                )}
             </main>
 
             <GapAnalysisModal

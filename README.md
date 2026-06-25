@@ -1,5 +1,9 @@
 # React + TypeScript + Vite
 
+## Project Documentation
+
+- Computations and numeric rules: `docs/computations-and-numbers.md`
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 It is preconfigured to work with Power Apps Code Apps.

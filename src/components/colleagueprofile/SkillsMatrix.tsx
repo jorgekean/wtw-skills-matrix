@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom';
 import { type ProficiencyLevel } from '../../types/skills';
 import { SkillCard } from './SkillCard';
+import { SkillsSpreadsheetEditor } from './SkillsSpreadsheetEditor';
 
 // --- Import the Generated Dataverse Services ---
 import { Wtw_skilllibrariesService } from '../../generated/services/Wtw_skilllibrariesService';
@@ -34,6 +35,7 @@ export const SkillsMatrix: React.FC = () => {
     const { slug } = useParams<{ slug: string }>();
 
     const [activeCategory, setActiveCategory] = useState<string>('');
+    const [isSpreadsheetMode, setIsSpreadsheetMode] = useState(false);
     const { isDark, toggleTheme } = useTheme();
     const [isSaving, setIsSaving] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
@@ -384,66 +386,83 @@ export const SkillsMatrix: React.FC = () => {
                                 </div>
                             ))}
                         </div>
+                        <button
+                            type="button"
+                            onClick={() => setIsSpreadsheetMode(prev => !prev)}
+                            className={`ml-auto inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[10px] font-black uppercase tracking-widest transition-colors ${isSpreadsheetMode ? 'bg-[#622F88] text-white border-[#622F88]' : 'bg-white dark:bg-slate-700 text-[#622F88] dark:text-purple-300 border-purple-200 dark:border-slate-600 hover:bg-purple-50 dark:hover:bg-slate-600'}`}
+                        >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM4 10h16M8 6v12" />
+                            </svg>
+                            {isSpreadsheetMode ? 'Card View' : 'Batch Edit'}
+                        </button>
                     </div>
                 </div>
             </section>
 
             <main className="flex-1 overflow-y-auto p-6 lg:p-8 pb-24">
-                {/* UPDATED: Iterate over Subcategories, rendering headers and grids cleanly */}
-                <div className="max-w-[1920px] mx-auto flex flex-col gap-10">
-                    {Object.entries(activeSubcategories)
-                        .sort(([catA], [catB]) => catA === 'General' ? -1 : catB === 'General' ? 1 : catA.localeCompare(catB))
-                        .map(([subCat, skills]) => (
-                            <div key={subCat} className="flex flex-col gap-5">
+                {isSpreadsheetMode ? (
+                    <SkillsSpreadsheetEditor
+                        activeCategory={activeCategory}
+                        activeSubcategories={activeSubcategories}
+                        userSkills={userSkills}
+                        onUpdateRating={handleUpdateRating}
+                        onToggleHeart={handleToggleHeart}
+                        onBulkUpdate={handleBulkUpdate}
+                    />
+                ) : (
+                    <div className="max-w-[1920px] mx-auto flex flex-col gap-10">
+                        {Object.entries(activeSubcategories)
+                            .sort(([catA], [catB]) => catA === 'General' ? -1 : catB === 'General' ? 1 : catA.localeCompare(catB))
+                            .map(([subCat, skills]) => (
+                                <div key={subCat} className="flex flex-col gap-5">
 
-                                {/* UPDATED: Subcategory Header with Bulk Action */}
-                                <div className="flex items-center gap-4 group">
-                                    <h2 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest">{subCat}</h2>
-                                    <div className="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
+                                    <div className="flex items-center gap-4 group">
+                                        <h2 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest">{subCat}</h2>
+                                        <div className="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
 
-                                    {/* Bulk Action Dropdown (Reveals on hover for a cleaner UI) */}
-                                    <div className="relative opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-200">
-                                        <select
-                                            className="text-[10px] font-bold text-[#622F88] dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-md py-1.5 pl-3 pr-7 appearance-none focus:outline-none focus:ring-2 focus:ring-purple-300 cursor-pointer shadow-sm"
-                                            defaultValue=""
-                                            onChange={(e) => {
-                                                if (e.target.value) {
-                                                    handleBulkUpdate(skills, e.target.value as ProficiencyLevel);
-                                                    e.target.value = ""; // Instantly reset the dropdown back to placeholder
-                                                }
-                                            }}
-                                        >
-                                            <option value="" disabled>Bulk Set All...</option>
-                                            <option value="N/A">Set All to N/A</option>
-                                            <option value="Potential">Set All to Potential</option>
-                                            <option value="Exposure">Set All to Exposure</option>
-                                            <option value="Experience">Set All to Experience</option>
-                                            <option value="Expert">Set All to Expert</option>
-                                            <option value="Consulting">Set All to Consulting</option>
-                                        </select>
-                                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[#622F88] dark:text-purple-400">
-                                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
-                                            </svg>
+                                        <div className="relative opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-200">
+                                            <select
+                                                className="text-[10px] font-bold text-[#622F88] dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-md py-1.5 pl-3 pr-7 appearance-none focus:outline-none focus:ring-2 focus:ring-purple-300 cursor-pointer shadow-sm"
+                                                defaultValue=""
+                                                onChange={(e) => {
+                                                    if (e.target.value) {
+                                                        handleBulkUpdate(skills, e.target.value as ProficiencyLevel);
+                                                        e.target.value = "";
+                                                    }
+                                                }}
+                                            >
+                                                <option value="" disabled>Bulk Set All...</option>
+                                                <option value="N/A">Set All to N/A</option>
+                                                <option value="Potential">Set All to Potential</option>
+                                                <option value="Exposure">Set All to Exposure</option>
+                                                <option value="Experience">Set All to Experience</option>
+                                                <option value="Expert">Set All to Expert</option>
+                                                <option value="Consulting">Set All to Consulting</option>
+                                            </select>
+                                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[#622F88] dark:text-purple-400">
+                                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
+                                                </svg>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
 
-                                {/* Skills Grid for this Subcategory */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
-                                    {skills.map(skill => (
-                                        <SkillCard
-                                            key={skill}
-                                            skill={skill}
-                                            details={userSkills[skill] || DEFAULT_SKILL_STATE}
-                                            onUpdateRating={handleUpdateRating}
-                                            onToggleHeart={handleToggleHeart}
-                                        />
-                                    ))}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
+                                        {skills.map(skill => (
+                                            <SkillCard
+                                                key={skill}
+                                                skill={skill}
+                                                details={userSkills[skill] || DEFAULT_SKILL_STATE}
+                                                onUpdateRating={handleUpdateRating}
+                                                onToggleHeart={handleToggleHeart}
+                                            />
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
-                </div>
+                            ))}
+                    </div>
+                )}
 
                 <div className="max-w-[1920px] mx-auto mt-12 bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm transition-colors duration-200">
                     <div className="flex items-center gap-2 mb-4">
